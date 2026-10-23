@@ -9,30 +9,42 @@ from pathlib import Path
 # EDIT THESE SETTINGS
 # ==========================================================
 
-# Paste your Google Sheet URL between the quotation marks:
-SHEET_URL = "SHEET_URL = https://docs.google.com/spreadsheets/d/1eNZmloz7IozVoU_1cTsKVveUca73VMnjvySR9VMvz_g/edit?gid=0#gid=0"
+# 1) Paste your Google Sheet URL between these quotation marks:
+SHEET_URL = "PASTE_YOUR_GOOGLE_SHEET_URL_HERE"
 
-# Put your club members' names in this list:
+# 2) Replace these examples with the names in your club roster:
 MEMBERS = [
     "Alex Johnson",
     "Jordan Smith",
     "Taylor Lee",
 ]
 
-# Optional: local service-account JSON path for testing on your PC.
-# On Streamlit Cloud, credentials are read securely from Streamlit Secrets.
+# Local testing on your computer. On Streamlit Cloud, the app uses Secrets.
 LOCAL_SERVICE_ACCOUNT_FILE = r"C:\Users\Srithan\service_account.json"
 
 WORKSHEET_NAME = "Attendance"
 TIMEZONE = "America/Los_Angeles"
 
+HEADERS = [
+    "Name",
+    "Start Date",
+    "Start Time",
+    "End Date",
+    "End Time",
+    "Status",
+]
+
 # ==========================================================
-# APP
+# PAGE
 # ==========================================================
 
-st.set_page_config(page_title="Club Check-In", page_icon="📋")
-st.title("📋 Club Check-In / Check-Out")
-st.caption("Search for your name, select it, and choose an action.")
+st.set_page_config(page_title="Club Clock In / Clock Out", page_icon="🕒")
+st.title("🕒 Club Clock In / Clock Out")
+st.write("Search for your name, select it, and use the appropriate button.")
+
+# ==========================================================
+# GOOGLE SHEETS CONNECTION
+# ==========================================================
 
 def get_worksheet():
     scopes = [
@@ -40,12 +52,13 @@ def get_worksheet():
         "https://www.googleapis.com/auth/drive",
     ]
 
-    if Path(LOCAL_SERVICE_ACCOUNT_FILE).exists():
+    if Path(LOCAL_SERVICE_ACCOUNT_FILE).is_file():
         credentials = Credentials.from_service_account_file(
             LOCAL_SERVICE_ACCOUNT_FILE, scopes=scopes
         )
     else:
-        # On Streamlit Cloud, add [gcp_service_account] in App settings → Secrets.
+        # In Streamlit Cloud, add your service-account fields under Secrets:
+        # [gcp_service_account]
         credentials = Credentials.from_service_account_info(
             dict(st.secrets["gcp_service_account"]), scopes=scopes
         )
@@ -57,40 +70,27 @@ def get_worksheet():
         worksheet = spreadsheet.worksheet(WORKSHEET_NAME)
     except gspread.WorksheetNotFound:
         worksheet = spreadsheet.add_worksheet(
-            title=WORKSHEET_NAME, rows=1000, cols=6
+            title=WORKSHEET_NAME, rows=1000, cols=len(HEADERS)
         )
 
-    headers = [
-        "Name",
-        "Check In Date",
-        "Check In Time",
-        "Check Out Date",
-        "Check Out Time",
-        "Status",
-    ]
-    if not worksheet.get_all_values():
-        worksheet.append_row(headers)
+    if not worksheet.row_values(1):
+        worksheet.update(range_name="A1:F1", values=[HEADERS])
 
     return worksheet
 
+
+if not SHEET_URL.startswith("https://"):
+    st.error("Paste your Google Sheet URL into SHEET_URL near the top of app.py.")
+    st.stop()
+
 if not MEMBERS:
-    st.error("Add member names to the MEMBERS list near the top of app.py.")
+    st.error("Add your club members to the MEMBERS list near the top of app.py.")
     st.stop()
 
-search = st.text_input("Search your name", placeholder="Start typing your name...")
-matches = [
-    name for name in MEMBERS
-    if search.strip().casefold() in name.casefold()
-] if search.strip() else MEMBERS
+# ==========================================================
+# MEMBER SEARCH
+# ==========================================================
 
-if not matches:
-    st.warning("No matching names. Check the spelling or ask the club organizer.")
-    st.stop()
-
-selected_name = st.selectbox("Select your full name", [""] + matches)
-
-if not selected_name:
-    st.info("Select your name to continue.")
-    st.stop()
-
-confirmed = st.checkbox(f"I confirm I am {selected_name}")
+search = st.text_input("Search for your name", placeholder="Start typing your name...")
+if search.strip():
+    matches = [

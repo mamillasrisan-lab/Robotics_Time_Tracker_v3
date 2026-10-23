@@ -10,7 +10,7 @@ from pathlib import Path
 # ==========================================================
 
 # Paste your Google Sheet URL between the quotation marks:
-SHEET_URL = "PASTE_YOUR_GOOGLE_SHEET_URL_HERE"
+SHEET_URL = "SHEET_URL = https://docs.google.com/spreadsheets/d/1eNZmloz7IozVoU_1cTsKVveUca73VMnjvySR9VMvz_g/edit?gid=0#gid=0"
 
 # Put your club members' names in this list:
 MEMBERS = [

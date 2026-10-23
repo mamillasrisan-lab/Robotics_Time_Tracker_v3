@@ -10,7 +10,7 @@ from pathlib import Path
 # ============================================================
 
 # Paste the full URL of your Google spreadsheet between quotes.
-SHEET_URL = "PASTE_YOUR_GOOGLE_SHEET_URL_HERE"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1eNZmloz7IozVoU_1cTsKVveUca73VMnjvySR9VMvz_g/edit?gid=0#gid=0"
 
 # Replace the example names with your club/robotics team roster.
 MEMBERS = [

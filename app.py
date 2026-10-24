@@ -20,7 +20,6 @@ MEMBERS = [
 ]
 
 LOCAL_SERVICE_ACCOUNT_FILE = r"C:\Users\Srithan\service_account.json"
-WORKSHEET_NAME = "Attendance"
 ATTENDANCE_WORKSHEET = "Attendance"
 TASKS_WORKSHEET = "Tasks"
 TIMEZONE = "America/Los_Angeles"
@@ -33,11 +32,7 @@ ATTENDANCE_HEADERS = [
     "End Time",
     "Status",
     "Clock In Device ID",
-    "Clock In Browser",
-    "Reserved (No IP Tracking)",
     "Clock Out Device ID",
-    "Clock Out Browser",
-    "Reserved (No IP Tracking)",
     "Device Mismatch",
     "Total Time Spent",
 ]
@@ -64,7 +59,6 @@ st.set_page_config(
 )
 
 # ========================= GOOGLE SHEETS =========================
-
 
 def get_credentials():
     scopes = [
@@ -97,11 +91,6 @@ def get_spreadsheet():
     return gspread.authorize(get_credentials()).open_by_url(SHEET_URL)
 
 
-def get_worksheet():
-    spreadsheet = get_spreadsheet()
-    return spreadsheet.worksheet(ATTENDANCE_WORKSHEET)
-
-
 def column_letter(number):
     result = ""
     while number:
@@ -123,6 +112,9 @@ def get_or_create_worksheet(title, headers):
     if worksheet.col_count < len(headers):
         worksheet.resize(cols=len(headers))
 
+    if worksheet.row_count < 2:
+        worksheet.resize(rows=2)
+
     worksheet.update(range_name=f"A1:{column_letter(len(headers))}1", values=[headers])
     return worksheet
 
@@ -136,9 +128,7 @@ def get_attendance_worksheet():
 def get_tasks_worksheet():
     return get_or_create_worksheet(TASKS_WORKSHEET, TASK_HEADERS)
 
-
 # ========================= TIME HELPERS =========================
-
 
 def california_now():
     return datetime.now(ZoneInfo(TIMEZONE))
@@ -182,12 +172,9 @@ def format_duration(total_seconds):
     minutes, seconds = divmod(remainder, 60)
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
-
 # ========================= ATTENDANCE HELPERS =========================
 
-
 def get_active_row(rows, member_name):
-    """Return the latest active visit row for this member."""
     active_row = None
     for row_number, row in enumerate(rows[1:], start=2):
         values = (row + [""] * len(ATTENDANCE_HEADERS))[: len(ATTENDANCE_HEADERS)]
@@ -228,16 +215,17 @@ def total_time_for_member(rows, member_name, period_start, period_end, now):
 
 
 def backfill_missing_visit_totals(worksheet):
-    """Fill missing totals for completed visits."""
     try:
         rows = worksheet.get_all_values()
         updates = []
         for row_number, row in enumerate(rows[1:], start=2):
             values = (row + [""] * len(ATTENDANCE_HEADERS))[: len(ATTENDANCE_HEADERS)]
-            if len(values) < 14:
+            if len(values) < 10:
                 continue
-            if values[13].strip():
+
+            if values[9].strip():
                 continue
+
             if values[5].strip().casefold() != "clocked out":
                 continue
 
@@ -246,45 +234,33 @@ def backfill_missing_visit_totals(worksheet):
             if start_dt is None or end_dt is None or end_dt < start_dt:
                 continue
 
-            updates.append({"range": f"N{row_number}", "values": [[format_duration((end_dt - start_dt).total_seconds())]]})
+            updates.append({
+                "range": f"J{row_number}",
+                "values": [[format_duration((end_dt - start_dt).total_seconds())]],
+            })
 
         if updates:
             worksheet.batch_update(updates, value_input_option="RAW")
     except Exception:
         pass
 
-
 # ========================= SELECTION HELPERS =========================
-
 
 def reset_person_selection():
     st.session_state["member_search"] = ""
     st.session_state["selected_member"] = ""
     st.session_state["confirm_member"] = False
-    # do not clear the device id here; it should be stored when the click happens
-
-
-def get_selected_student_id():
-    student_id = str(st.session_state.get("selected_student_id", "") or "").strip()
-    if student_id:
-        return student_id
-    return str(st.session_state.get("device_id", "Unavailable") or "Unavailable")
-
 
 # ========================= DEVICE REGISTRATION =========================
 
-
 def get_device_metadata():
-    """Create and read a persistent per-browser registration ID."""
     device_id = st.session_state.get("device_id")
     if not device_id:
         device_id = f"device-{uuid4()}"
         st.session_state["device_id"] = device_id
     return device_id
 
-
 # ========================= CLOCK ACTIONS =========================
-
 
 def clock_in_callback():
     member_name = st.session_state.get("selected_member", "")
@@ -311,11 +287,8 @@ def clock_in_callback():
             "",
             "",
             "",
-            "",
-            "",
-            "",
-            "",
         ]
+
         worksheet.append_row(row, value_input_option="RAW", insert_data_option="INSERT_ROWS")
         st.session_state["last_action_message"] = (
             f"{member_name} clocked in at {action_time.strftime('%I:%M:%S %p')} on {action_time.strftime('%Y-%m-%d')}."
@@ -361,10 +334,13 @@ def clock_out_callback():
         if start_dt is not None and action_time >= start_dt:
             total_time_text = format_duration((action_time - start_dt).total_seconds())
 
-        worksheet.update(range_name=f"D{active_row}:F{active_row}", values=[[end_date, end_time, "Clocked Out"]])
         worksheet.update(
-            range_name=f"J{active_row}:N{active_row}",
-            values=[[clock_out_device_id, "", "", mismatch, total_time_text, ""]],
+            range_name=f"D{active_row}:F{active_row}",
+            values=[[end_date, end_time, "Clocked Out"]],
+        )
+        worksheet.update(
+            range_name=f"H{active_row}:J{active_row}",
+            values=[[clock_out_device_id, mismatch, total_time_text]],
         )
 
         st.session_state["last_action_message"] = (
@@ -374,22 +350,21 @@ def clock_out_callback():
     except Exception as exc:
         st.session_state["last_action_message"] = f"Clock-out failed: {exc}"
 
-
 # ========================= TASK TRACKER =========================
-
 
 def show_task_tracker():
     st.divider()
     st.header("Task Tracker")
     st.write("Create shared tasks, assign them to team members, and track their progress.")
 
-    default_creator = st.session_state.get("selected_member", "")
     member_options = sorted(set(MEMBERS), key=str.casefold)
+    default_creator = st.session_state.get("selected_member", "")
 
     with st.form("create_task_form", clear_on_submit=True):
         st.subheader("Create a task")
         task_title = st.text_input("Task name")
         task_description = st.text_area("Description (optional)")
+
         col1, col2 = st.columns(2)
         with col1:
             default_creator_index = member_options.index(default_creator) if default_creator in member_options else 0
@@ -399,6 +374,7 @@ def show_task_tracker():
             task_priority = st.selectbox("Priority", TASK_PRIORITIES, index=1)
             has_due_date = st.checkbox("Set a due date")
             task_due_date = st.date_input("Due date", value=california_now().date(), disabled=not has_due_date)
+
         create_task = st.form_submit_button("Create Task", use_container_width=True)
 
     if create_task:
@@ -475,6 +451,7 @@ def show_task_tracker():
         if (status_filter == "All statuses" or task["Status"] == status_filter)
         and (assignee_filter == "All members" or task["Assigned To"] == assignee_filter)
     ]
+
     display_tasks = [{key: value for key, value in task.items() if key != "Task ID"} for task in visible_tasks]
     st.dataframe(display_tasks, use_container_width=True, hide_index=True)
 
@@ -503,16 +480,14 @@ def show_task_tracker():
             st.error("Could not update the task status.")
             st.caption(f"Technical detail: {exc}")
 
-
 # ========================= APP UI =========================
-
 
 def app():
     st.title("Robotics Team Time Tracker")
     st.write(
         "The home page shows everyone's time for today. Members can clock in or out below. "
         "Each new visit is saved as a separate row. Track attendance, review time reports, "
-        "and manage shared team tasks. Time is recorded in California time. This app does not collect IP addresses."
+        "and manage shared team tasks. Time is recorded in California time."
     )
 
     device_id = get_device_metadata()
@@ -581,6 +556,7 @@ def app():
         total_seconds = total_time_for_member(rows, member, today_start, tomorrow_start, now)
         active_row = get_active_row(rows, member)
         active_start_text = "—"
+
         if active_row is not None:
             active_values = (rows[active_row - 1] + [""] * len(ATTENDANCE_HEADERS))[: len(ATTENDANCE_HEADERS)]
             active_start = parse_sheet_datetime(active_values[1], active_values[2])
@@ -618,13 +594,6 @@ def app():
         )
 
         if selected_name:
-            st.text_input(
-                "Student ID number",
-                key="selected_student_id",
-                placeholder="Enter student ID",
-                help="This ID is saved when the student clocks in or out.",
-            )
-
             confirmed = st.checkbox(f"I confirm that I am {selected_name}", key="confirm_member")
             if confirmed:
                 active_row = get_active_row(rows, selected_name)
@@ -639,14 +608,14 @@ def app():
                         "Clock In",
                         type="primary",
                         use_container_width=True,
-                        disabled=active_row is not None or not device_id,
+                        disabled=active_row is not None,
                         on_click=clock_in_callback,
                     )
                 with col_out:
                     st.button(
                         "Clock Out",
                         use_container_width=True,
-                        disabled=active_row is None or not device_id,
+                        disabled=active_row is None,
                         on_click=clock_out_callback,
                     )
             else:

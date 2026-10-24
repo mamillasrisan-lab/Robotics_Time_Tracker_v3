@@ -46,7 +46,7 @@ HEADERS = [
     "Unused",
     "Device Mismatch",
     "Total Time Spent",
-ATTENDANCE_WORKSHEET = "Attendance"
+ATTENDANCE_WORKSHEET == "Attendance"
 TASKS_WORKSHEET = "Tasks"
 
 # Keep the original 14-column attendance layout for compatibility with existing data.

@@ -8,7 +8,6 @@ import gspread
 import streamlit as st
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import APIError, WorksheetNotFound
-from streamlit_js_eval import streamlit_js_eval
 
 # ========================= SETTINGS =========================
 
@@ -268,34 +267,19 @@ def reset_person_selection():
 
 
 def get_device_metadata():
-    """Create/read a persistent browser registration ID."""
+    """Create and read a persistent browser-independent registration ID."""
     try:
-        device_id = streamlit_js_eval(
-            js_expressions="""(() => {
-                const key = 'robotics_time_tracker_device_id';
-                let id = localStorage.getItem(key);
-                if (!id) {
-                    id = crypto.randomUUID ? crypto.randomUUID() : 'dev-' + Date.now() + '-' + Math.random().toString(16).slice(2);
-                    localStorage.setItem(key, id);
-                }
-                return id;
-            })()""",
-            key="persistent_device_id_component",
-        )
-        browser = streamlit_js_eval(
-            js_expressions="""(() => navigator.userAgent || '')()""",
-            key="browser_user_agent_component",
-        )
+        device_id = st.session_state.get("device_id")
+        if not device_id:
+            device_id = st.query_params.get("device_id", "")
     except Exception:
         device_id = ""
-        browser = ""
 
-    device_id = str(device_id).strip() if device_id else ""
-    browser = str(browser).strip() if browser else ""
+    if not device_id:
+        device_id = f"device-{uuid4()}"
+        st.session_state["device_id"] = device_id
 
-    st.session_state["audit_device_id"] = device_id or "Unavailable"
-    st.session_state["audit_browser"] = browser or "Unavailable"
-    return device_id, browser
+    return device_id
 
 
 # ========================= CLOCK ACTIONS =========================
@@ -321,8 +305,8 @@ def clock_in_callback():
             "",
             "",
             "Clocked In",
-            st.session_state.get("audit_device_id", "Unavailable"),
-            st.session_state.get("audit_browser", "Unavailable"),
+            st.session_state.get("device_id", "Unavailable"),
+            "",
             "",
             "",
             "",
@@ -360,9 +344,7 @@ def clock_out_callback():
         end_time = action_time.strftime("%I:%M:%S %p")
 
         clock_in_device_id = old_row[6]
-        clock_out_device_id = st.session_state.get("audit_device_id", "Unavailable")
-        clock_in_browser = old_row[7]
-        clock_out_browser = st.session_state.get("audit_browser", "Unavailable")
+        clock_out_device_id = st.session_state.get("device_id", "Unavailable")
 
         mismatch = "Unknown"
         if (
@@ -380,7 +362,7 @@ def clock_out_callback():
         worksheet.update(range_name=f"D{active_row}:F{active_row}", values=[[end_date, end_time, "Clocked Out"]])
         worksheet.update(
             range_name=f"J{active_row}:N{active_row}",
-            values=[[clock_out_device_id, clock_out_browser, "", mismatch, total_time_text, ""]],
+            values=[[clock_out_device_id, "", "", mismatch, total_time_text, ""]],
         )
 
         st.session_state["last_action_message"] = (
@@ -531,7 +513,7 @@ def app():
         "and manage shared team tasks. Time is recorded in California time. This app does not collect IP addresses."
     )
 
-    device_id, browser_user_agent = get_device_metadata()
+    device_id = get_device_metadata()
     if device_id:
         safe_device_id = html.escape(device_id)
         st.markdown(
@@ -559,8 +541,6 @@ def app():
             """,
             unsafe_allow_html=True,
         )
-    else:
-        st.info("Loading browser device information. If it remains unavailable, reload the page and check that browser storage is enabled.")
 
     if not SHEET_URL.startswith("https://docs.google.com/spreadsheets/d/"):
         st.error("The Google Sheet URL in app.py is not valid.")

@@ -5,6 +5,7 @@ from gspread.exceptions import WorksheetNotFound, APIError
 from datetime import datetime, date, time, timedelta
 from zoneinfo import ZoneInfo
 from pathlib import Path
+from streamlit_js_eval import streamlit_js_eval
 
 # ========================= SETTINGS =========================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1eNZmloz7IozVoU_1cTsKVveUca73VMnjvySR9VMvz_g/edit"
@@ -15,7 +16,12 @@ MEMBERS = ["Alex Johnson", "Jordan Smith", "Taylor Lee"]
 LOCAL_SERVICE_ACCOUNT_FILE = r"C:\Users\Srithan\service_account.json"
 WORKSHEET_NAME = "Attendance"
 TIMEZONE = "America/Los_Angeles"
-HEADERS = ["Name", "Start Date", "Start Time", "End Date", "End Time", "Status"]
+HEADERS = [
+    "Name", "Start Date", "Start Time", "End Date", "End Time", "Status",
+    "Clock In Device ID", "Clock In Browser", "Clock In IP",
+    "Clock Out Device ID", "Clock Out Browser", "Clock Out IP",
+    "Device Mismatch",
+]
 
 
 # ========================= GOOGLE SHEETS =========================
@@ -61,8 +67,10 @@ def get_worksheet():
             # Another session may have created the tab at the same time.
             worksheet = spreadsheet.worksheet(WORKSHEET_NAME)
 
-    if not worksheet.row_values(1):
-        worksheet.update(range_name="A1:F1", values=[HEADERS])
+    # Ensure the sheet has enough columns and current audit headers.
+    if worksheet.col_count < len(HEADERS):
+        worksheet.resize(cols=len(HEADERS))
+    worksheet.update(range_name="A1:M1", values=[HEADERS])
 
     return worksheet
 
@@ -166,6 +174,61 @@ def reset_person_selection():
     st.session_state["confirm_member"] = False
 
 
+def get_client_ip():
+    """Read the visitor IP forwarded by the hosting proxy, when available."""
+    try:
+        headers = st.context.headers
+        forwarded = headers.get("X-Forwarded-For", "")
+        if forwarded:
+            # Hosting proxies commonly append a comma-separated forwarding chain.
+            return forwarded.split(",")[0].strip()
+        return (
+            headers.get("X-Real-IP", "").strip()
+            or headers.get("CF-Connecting-IP", "").strip()
+            or "Unavailable"
+        )
+    except Exception:
+        return "Unavailable"
+
+
+def get_device_metadata():
+    """Read a persistent browser ID and browser user-agent from the visitor's browser."""
+    try:
+        device_id = streamlit_js_eval(
+            js_expressions="""(() => {
+                const key = 'robotics_time_tracker_device_id';
+                let id = localStorage.getItem(key);
+                if (!id) {
+                    id = (crypto.randomUUID)
+                        ? crypto.randomUUID()
+                        : ('dev-' + Date.now() + '-' + Math.random().toString(16).slice(2));
+                    localStorage.setItem(key, id);
+                }
+                return id;
+            })()""",
+            key="persistent_device_id_component",
+        )
+    except Exception:
+        device_id = None
+
+    try:
+        browser = streamlit_js_eval(
+            js_expressions="navigator.userAgent",
+            key="browser_user_agent_component",
+        )
+    except Exception:
+        browser = None
+
+    device_id = str(device_id).strip() if device_id else ""
+    browser = str(browser).strip() if browser else ""
+
+    # Keep values available to the clock-action callbacks.
+    st.session_state["audit_device_id"] = device_id or "Unavailable"
+    st.session_state["audit_browser"] = browser or "Unavailable"
+    st.session_state["audit_ip"] = get_client_ip()
+    return device_id, browser
+
+
 def clock_in_callback():
     """Save a clock-in and reset the member widgets safely."""
     member_name = st.session_state.get("selected_member", "")
@@ -190,6 +253,10 @@ def clock_in_callback():
                 "",
                 "",
                 "Clocked In",
+                st.session_state.get("audit_device_id", "Unavailable"),
+                st.session_state.get("audit_browser", "Unavailable"),
+                st.session_state.get("audit_ip", "Unavailable"),
+                "", "", "", "",
             ],
             value_input_option="RAW",
             insert_data_option="INSERT_ROWS",
@@ -229,6 +296,31 @@ def clock_out_callback():
                 "Clocked Out",
             ]],
         )
+        clock_in_device_id = (
+            latest_rows[active_row - 1][6]
+            if len(latest_rows[active_row - 1]) > 6 else ""
+        )
+        clock_out_device_id = st.session_state.get("audit_device_id", "Unavailable")
+        mismatch = (
+            "Yes"
+            if clock_in_device_id and clock_out_device_id
+            and clock_in_device_id != "Unavailable"
+            and clock_out_device_id != "Unavailable"
+            and clock_in_device_id != clock_out_device_id
+            else "No" if clock_in_device_id and clock_out_device_id
+            and clock_in_device_id != "Unavailable"
+            and clock_out_device_id != "Unavailable"
+            else "Unknown"
+        )
+        worksheet.update(
+            range_name=f"J{active_row}:M{active_row}",
+            values=[[
+                clock_out_device_id,
+                st.session_state.get("audit_browser", "Unavailable"),
+                st.session_state.get("audit_ip", "Unavailable"),
+                mismatch,
+            ]],
+        )
         st.session_state["last_action_message"] = (
             f"{member_name} clocked out at {action_time.strftime('%I:%M:%S %p')} "
             f"on {action_time.strftime('%Y-%m-%d')}."
@@ -245,6 +337,13 @@ st.write(
     "The home page shows everyone's time for today. Members can clock in or out "
     "below, and the app resets for the next person after each action."
 )
+
+device_id, browser_user_agent = get_device_metadata()
+if not device_id:
+    st.info(
+        "Loading browser device information… If this message remains, reload the page "
+        "and make sure browser storage is enabled."
+    )
 
 if not SHEET_URL.startswith("https://docs.google.com/spreadsheets/d/"):
     st.error("The Google Sheet URL in app.py is not valid.")
@@ -365,7 +464,7 @@ else:
                     "Clock In",
                     type="primary",
                     use_container_width=True,
-                    disabled=active_row is not None,
+                    disabled=active_row is not None or not device_id,
                     on_click=clock_in_callback,
                 )
 
@@ -373,7 +472,7 @@ else:
                 st.button(
                     "Clock Out",
                     use_container_width=True,
-                    disabled=active_row is None,
+                    disabled=active_row is None or not device_id,
                     on_click=clock_out_callback,
                 )
         else:

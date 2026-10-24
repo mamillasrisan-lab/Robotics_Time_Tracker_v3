@@ -587,8 +587,10 @@ else:
         if confirmed:
             rows = worksheet.get_all_values()
             active_row = get_active_row(rows, selected_name)
-            st.success(f"{selected_name} is currently clocked in.") if active_row else st.info(
-                f"{selected_name} is currently clocked out."
+           if active_row is not None:
+    st.success(f"{selected_name} is currently clocked in.")
+else:
+    st.info(f"{selected_name} is currently clocked out.")
             )
             col_in, col_out = st.columns(2)
             with col_in:

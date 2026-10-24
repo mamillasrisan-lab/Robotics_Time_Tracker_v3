@@ -5,6 +5,7 @@ from gspread.exceptions import WorksheetNotFound, APIError
 from datetime import datetime, date, time, timedelta
 from zoneinfo import ZoneInfo
 from pathlib import Path
+from uuid import uuid4
 from streamlit_js_eval import streamlit_js_eval
 
 # ========================= SETTINGS =========================
@@ -15,6 +16,13 @@ MEMBERS = ["Alex Johnson", "Jordan Smith", "Taylor Lee"]
 
 LOCAL_SERVICE_ACCOUNT_FILE = r"C:\Users\Srithan\service_account.json"
 WORKSHEET_NAME = "Attendance"
+TASKS_WORKSHEET_NAME = "Tasks"
+TASK_HEADERS = [
+    "Task ID", "Task", "Description", "Created By", "Assigned To",
+    "Priority", "Due Date", "Status", "Created At",
+]
+TASK_STATUSES = ["To Do", "In Progress", "Blocked", "Completed"]
+TASK_PRIORITIES = ["Low", "Medium", "High", "Urgent"]
 TIMEZONE = "America/Los_Angeles"
 HEADERS = [
     "Name", "Start Date", "Start Time", "End Date", "End Time", "Status",
@@ -73,6 +81,29 @@ def get_worksheet():
     worksheet.update(range_name="A1:N1", values=[HEADERS])
     backfill_missing_visit_totals(worksheet)
 
+    return worksheet
+
+
+def get_tasks_worksheet():
+    """Get or create the separate Tasks worksheet and its headers."""
+    spreadsheet = gspread.authorize(get_credentials()).open_by_url(SHEET_URL)
+    try:
+        worksheet = spreadsheet.worksheet(TASKS_WORKSHEET_NAME)
+    except WorksheetNotFound:
+        try:
+            worksheet = spreadsheet.add_worksheet(
+                title=TASKS_WORKSHEET_NAME,
+                rows=1000,
+                cols=len(TASK_HEADERS),
+            )
+        except APIError:
+            # Another session may have created the tab at the same time.
+            worksheet = spreadsheet.worksheet(TASKS_WORKSHEET_NAME)
+
+    if worksheet.col_count < len(TASK_HEADERS):
+        worksheet.resize(cols=len(TASK_HEADERS))
+    if worksheet.row_values(1) != TASK_HEADERS:
+        worksheet.update(range_name="A1:I1", values=[TASK_HEADERS])
     return worksheet
 
 
@@ -620,3 +651,172 @@ if range_start and range_end:
             st.dataframe(visit_details, use_container_width=True, hide_index=True)
         else:
             st.info("No recorded time for this person in the selected date range.")
+
+# ========================= CUSTOM TASK BOARD =========================
+st.divider()
+st.subheader("Team Task Board")
+st.write(
+    "Create custom tasks, assign them to a team member, choose a priority, "
+    "and update the task status. Tasks are stored in a separate Google Sheets tab named Tasks."
+)
+
+with st.expander("＋ Create a custom task", expanded=False):
+    with st.form("create_custom_task_form", clear_on_submit=True):
+        task_title = st.text_input(
+            "Task name",
+            placeholder="e.g., Test the autonomous routine",
+            max_chars=160,
+        )
+        task_description = st.text_area(
+            "Description (optional)",
+            placeholder="Add details, acceptance criteria, or notes...",
+            max_chars=2000,
+        )
+        task_col1, task_col2 = st.columns(2)
+        with task_col1:
+            task_creator = st.selectbox(
+                "Created by",
+                options=sorted(set(MEMBERS), key=str.casefold),
+                key="task_creator",
+            )
+            task_assignee = st.selectbox(
+                "Assign to",
+                options=sorted(set(MEMBERS), key=str.casefold),
+                key="task_assignee",
+            )
+        with task_col2:
+            task_priority = st.selectbox(
+                "Priority",
+                options=TASK_PRIORITIES,
+                index=1,
+                key="task_priority",
+            )
+            has_due_date = st.checkbox("Set a due date", value=False)
+            task_due_date = st.date_input(
+                "Due date",
+                value=california_now().date(),
+                key="task_due_date",
+            )
+        create_task = st.form_submit_button(
+            "Create Task",
+            type="primary",
+            use_container_width=True,
+        )
+
+    if create_task:
+        if not task_title.strip():
+            st.error("Enter a task name before creating the task.")
+        else:
+            try:
+                tasks_worksheet = get_tasks_worksheet()
+                created_at = california_now()
+                task_id = str(uuid4())
+                tasks_worksheet.append_row(
+                    [
+                        task_id,
+                        task_title.strip(),
+                        task_description.strip(),
+                        task_creator,
+                        task_assignee,
+                        task_priority,
+                        task_due_date.strftime("%Y-%m-%d") if has_due_date else "",
+                        "To Do",
+                        created_at.strftime("%Y-%m-%d %I:%M:%S %p"),
+                    ],
+                    value_input_option="RAW",
+                    insert_data_option="INSERT_ROWS",
+                )
+                st.success(f"Task created and assigned to {task_assignee}.")
+                st.rerun()
+            except Exception as exc:
+                st.error("Could not save the task to Google Sheets.")
+                st.caption(f"Technical detail: {exc}")
+
+try:
+    tasks_worksheet = get_tasks_worksheet()
+    task_rows = tasks_worksheet.get_all_values()
+except Exception as exc:
+    st.error("Could not load the task board from Google Sheets.")
+    st.caption(f"Technical detail: {exc}")
+    task_rows = [TASK_HEADERS]
+
+if len(task_rows) > 1:
+    task_records = []
+    task_row_lookup = {}
+    for sheet_row_number, raw_row in enumerate(task_rows[1:], start=2):
+        values = (raw_row + [""] * len(TASK_HEADERS))[:len(TASK_HEADERS)]
+        task_id = values[0].strip()
+        if not task_id:
+            continue
+        task_row_lookup[task_id] = sheet_row_number
+        task_records.append({
+            "Task ID": task_id,
+            "Task": values[1],
+            "Description": values[2],
+            "Created By": values[3],
+            "Assigned To": values[4],
+            "Priority": values[5],
+            "Due Date": values[6] or "—",
+            "Status": values[7] or "To Do",
+            "Created At": values[8],
+        })
+
+    if task_records:
+        filter_col1, filter_col2 = st.columns(2)
+        with filter_col1:
+            task_status_filter = st.selectbox(
+                "Filter tasks by status",
+                ["All statuses"] + TASK_STATUSES,
+                key="task_status_filter",
+            )
+        with filter_col2:
+            task_assignee_filter = st.selectbox(
+                "Filter tasks by assignee",
+                ["All members"] + sorted(set(MEMBERS), key=str.casefold),
+                key="task_assignee_filter",
+            )
+
+        visible_tasks = [
+            task for task in task_records
+            if (task_status_filter == "All statuses" or task["Status"] == task_status_filter)
+            and (task_assignee_filter == "All members" or task["Assigned To"] == task_assignee_filter)
+        ]
+        st.dataframe(visible_tasks, use_container_width=True, hide_index=True)
+
+        st.markdown("#### Update a task's status")
+        task_options = {
+            f'{task["Task"]} — {task["Assigned To"]} [{task["Priority"]}] ({task["Task ID"][:8]})':
+                task["Task ID"]
+            for task in task_records
+        }
+        update_col1, update_col2 = st.columns(2)
+        with update_col1:
+            selected_task_label = st.selectbox(
+                "Choose a task",
+                options=list(task_options.keys()),
+                key="selected_task_to_update",
+            )
+        with update_col2:
+            selected_task_status = st.selectbox(
+                "New status",
+                options=TASK_STATUSES,
+                key="selected_task_new_status",
+            )
+
+        if st.button("Save Task Status", use_container_width=True):
+            selected_task_id = task_options[selected_task_label]
+            target_row = task_row_lookup[selected_task_id]
+            try:
+                tasks_worksheet.update(
+                    range_name=f"H{target_row}",
+                    values=[[selected_task_status]],
+                )
+                st.success("Task status updated.")
+                st.rerun()
+            except Exception as exc:
+                st.error("Could not update the task status.")
+                st.caption(f"Technical detail: {exc}")
+    else:
+        st.info("No tasks yet. Create a custom task above to get started.")
+else:
+    st.info("No tasks yet. Create a custom task above to get started.")

@@ -261,24 +261,25 @@ def reset_person_selection():
     st.session_state["member_search"] = ""
     st.session_state["selected_member"] = ""
     st.session_state["confirm_member"] = False
+    st.session_state["selected_student_id"] = ""
+
+
+def get_selected_student_id():
+    student_id = str(st.session_state.get("selected_student_id", "") or "").strip()
+    if student_id:
+        return student_id
+    return str(st.session_state.get("device_id", "Unavailable") or "Unavailable")
 
 
 # ========================= DEVICE REGISTRATION =========================
 
 
 def get_device_metadata():
-    """Create and read a persistent browser-independent registration ID."""
-    try:
-        device_id = st.session_state.get("device_id")
-        if not device_id:
-            device_id = st.query_params.get("device_id", "")
-    except Exception:
-        device_id = ""
-
+    """Create and read a persistent per-browser registration ID."""
+    device_id = st.session_state.get("device_id")
     if not device_id:
         device_id = f"device-{uuid4()}"
         st.session_state["device_id"] = device_id
-
     return device_id
 
 
@@ -298,6 +299,7 @@ def clock_in_callback():
             return
 
         action_time = california_now()
+        student_id = get_selected_student_id()
         row = [
             member_name,
             action_time.strftime("%Y-%m-%d"),
@@ -305,7 +307,7 @@ def clock_in_callback():
             "",
             "",
             "Clocked In",
-            st.session_state.get("device_id", "Unavailable"),
+            student_id,
             "",
             "",
             "",
@@ -344,7 +346,7 @@ def clock_out_callback():
         end_time = action_time.strftime("%I:%M:%S %p")
 
         clock_in_device_id = old_row[6]
-        clock_out_device_id = st.session_state.get("device_id", "Unavailable")
+        clock_out_device_id = get_selected_student_id()
 
         mismatch = "Unknown"
         if (
@@ -616,6 +618,13 @@ def app():
         )
 
         if selected_name:
+            st.text_input(
+                "Student ID number",
+                key="selected_student_id",
+                placeholder="Enter student ID",
+                help="This ID is saved when the student clocks in or out.",
+            )
+
             confirmed = st.checkbox(f"I confirm that I am {selected_name}", key="confirm_member")
             if confirmed:
                 active_row = get_active_row(rows, selected_name)

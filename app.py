@@ -159,6 +159,85 @@ def total_time_for_member(rows, member_name, period_start, period_end, now):
     return total_seconds
 
 
+def reset_person_selection():
+    """Reset widget values from a callback, before Streamlit recreates the widgets."""
+    st.session_state["member_search"] = ""
+    st.session_state["selected_member"] = ""
+    st.session_state["confirm_member"] = False
+
+
+def clock_in_callback():
+    """Save a clock-in and reset the member widgets safely."""
+    member_name = st.session_state.get("selected_member", "")
+    if not member_name:
+        return
+
+    try:
+        worksheet = get_worksheet()
+        latest_rows = worksheet.get_all_values()
+        if get_active_row(latest_rows, member_name) is not None:
+            st.session_state["last_action_message"] = (
+                f"{member_name} is already clocked in."
+            )
+            return
+
+        action_time = california_now()
+        worksheet.append_row(
+            [
+                member_name,
+                action_time.strftime("%Y-%m-%d"),
+                action_time.strftime("%I:%M:%S %p"),
+                "",
+                "",
+                "Clocked In",
+            ],
+            value_input_option="RAW",
+            insert_data_option="INSERT_ROWS",
+        )
+        st.session_state["last_action_message"] = (
+            f"{member_name} clocked in at {action_time.strftime('%I:%M:%S %p')} "
+            f"on {action_time.strftime('%Y-%m-%d')}."
+        )
+        reset_person_selection()
+    except Exception as exc:
+        st.session_state["last_action_message"] = f"Clock-in failed: {exc}"
+
+
+def clock_out_callback():
+    """Save a clock-out and reset the member widgets safely."""
+    member_name = st.session_state.get("selected_member", "")
+    if not member_name:
+        return
+
+    try:
+        worksheet = get_worksheet()
+        latest_rows = worksheet.get_all_values()
+        active_row = get_active_row(latest_rows, member_name)
+
+        if active_row is None:
+            st.session_state["last_action_message"] = (
+                f"No active clock-in was found for {member_name}."
+            )
+            return
+
+        action_time = california_now()
+        worksheet.update(
+            range_name=f"D{active_row}:F{active_row}",
+            values=[[
+                action_time.strftime("%Y-%m-%d"),
+                action_time.strftime("%I:%M:%S %p"),
+                "Clocked Out",
+            ]],
+        )
+        st.session_state["last_action_message"] = (
+            f"{member_name} clocked out at {action_time.strftime('%I:%M:%S %p')} "
+            f"on {action_time.strftime('%Y-%m-%d')}."
+        )
+        reset_person_selection()
+    except Exception as exc:
+        st.session_state["last_action_message"] = f"Clock-out failed: {exc}"
+
+
 # ========================= APP UI =========================
 st.set_page_config(page_title="Robotics Team Time Tracker", page_icon="🕒")
 st.title("Robotics Team Time Tracker")
@@ -176,10 +255,11 @@ if not MEMBERS or any(not name.strip() for name in MEMBERS):
     st.stop()
 
 # Home / Next Person resets the selection fields.
-if st.button("Home / Next Person", use_container_width=True):
-    st.session_state["member_search"] = ""
-    st.session_state["selected_member"] = ""
-    st.session_state["confirm_member"] = False
+if st.button(
+    "Home / Next Person",
+    use_container_width=True,
+    on_click=reset_person_selection,
+):
     st.rerun()
 
 if st.session_state.get("last_action_message"):
@@ -281,81 +361,21 @@ else:
             col_in, col_out = st.columns(2)
 
             with col_in:
-                clock_in_clicked = st.button(
+                st.button(
                     "Clock In",
                     type="primary",
                     use_container_width=True,
                     disabled=active_row is not None,
+                    on_click=clock_in_callback,
                 )
 
             with col_out:
-                clock_out_clicked = st.button(
+                st.button(
                     "Clock Out",
                     use_container_width=True,
                     disabled=active_row is None,
+                    on_click=clock_out_callback,
                 )
-
-            if clock_in_clicked:
-                try:
-                    latest_rows = worksheet.get_all_values()
-                    if get_active_row(latest_rows, selected_name) is not None:
-                        st.warning(f"{selected_name} is already clocked in.")
-                    else:
-                        action_time = california_now()
-                        worksheet.append_row(
-                            [
-                                selected_name,
-                                action_time.strftime("%Y-%m-%d"),
-                                action_time.strftime("%I:%M:%S %p"),
-                                "",
-                                "",
-                                "Clocked In",
-                            ],
-                            value_input_option="RAW",
-                            insert_data_option="INSERT_ROWS",
-                        )
-                        st.session_state["last_action_message"] = (
-                            f"{selected_name} clocked in at "
-                            f"{action_time.strftime('%I:%M:%S %p')} "
-                            f"on {action_time.strftime('%Y-%m-%d')}."
-                        )
-                        st.session_state["member_search"] = ""
-                        st.session_state["selected_member"] = ""
-                        st.session_state["confirm_member"] = False
-                        st.rerun()
-                except Exception as exc:
-                    st.error("Clock-in failed.")
-                    st.caption(f"Technical detail: {exc}")
-
-            if clock_out_clicked:
-                try:
-                    latest_rows = worksheet.get_all_values()
-                    active_row_latest = get_active_row(latest_rows, selected_name)
-
-                    if active_row_latest is None:
-                        st.warning(f"No active clock-in was found for {selected_name}.")
-                    else:
-                        action_time = california_now()
-                        worksheet.update(
-                            range_name=f"D{active_row_latest}:F{active_row_latest}",
-                            values=[[
-                                action_time.strftime("%Y-%m-%d"),
-                                action_time.strftime("%I:%M:%S %p"),
-                                "Clocked Out",
-                            ]],
-                        )
-                        st.session_state["last_action_message"] = (
-                            f"{selected_name} clocked out at "
-                            f"{action_time.strftime('%I:%M:%S %p')} "
-                            f"on {action_time.strftime('%Y-%m-%d')}."
-                        )
-                        st.session_state["member_search"] = ""
-                        st.session_state["selected_member"] = ""
-                        st.session_state["confirm_member"] = False
-                        st.rerun()
-                except Exception as exc:
-                    st.error("Clock-out failed.")
-                    st.caption(f"Technical detail: {exc}")
         else:
             st.info("Confirm the selected name to enable Clock In / Clock Out.")
     else:

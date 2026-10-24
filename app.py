@@ -20,7 +20,7 @@ HEADERS = [
     "Name", "Start Date", "Start Time", "End Date", "End Time", "Status",
     "Clock In Device ID", "Clock In Browser", "Clock In IP",
     "Clock Out Device ID", "Clock Out Browser", "Clock Out IP",
-    "Device Mismatch",
+    "Device Mismatch", "Total Time Spent",
 ]
 
 
@@ -70,7 +70,8 @@ def get_worksheet():
     # Ensure the sheet has enough columns and current audit headers.
     if worksheet.col_count < len(HEADERS):
         worksheet.resize(cols=len(HEADERS))
-    worksheet.update(range_name="A1:M1", values=[HEADERS])
+    worksheet.update(range_name="A1:N1", values=[HEADERS])
+    backfill_missing_visit_totals(worksheet)
 
     return worksheet
 
@@ -167,6 +168,33 @@ def total_time_for_member(rows, member_name, period_start, period_end, now):
     return total_seconds
 
 
+def backfill_missing_visit_totals(worksheet):
+    """Fill totals for previously completed visits where the total column is blank."""
+    try:
+        rows = worksheet.get_all_values()
+        updates = []
+        for row_number, row in enumerate(rows[1:], start=2):
+            values = (row + [""] * len(HEADERS))[:len(HEADERS)]
+            if values[13].strip():
+                continue
+            if values[5].strip().casefold() != "clocked out":
+                continue
+
+            start_dt = parse_sheet_datetime(values[1], values[2])
+            end_dt = parse_sheet_datetime(values[3], values[4])
+            if start_dt is None or end_dt is None or end_dt < start_dt:
+                continue
+
+            duration_text = format_duration((end_dt - start_dt).total_seconds())
+            updates.append({"range": f"N{row_number}", "values": [[duration_text]]})
+
+        if updates:
+            worksheet.batch_update(updates, value_input_option="RAW")
+    except Exception:
+        # Do not prevent attendance use if historical backfilling fails.
+        pass
+
+
 def reset_person_selection():
     """Reset widget values from a callback, before Streamlit recreates the widgets."""
     st.session_state["member_search"] = ""
@@ -256,7 +284,7 @@ def clock_in_callback():
                 st.session_state.get("audit_device_id", "Unavailable"),
                 st.session_state.get("audit_browser", "Unavailable"),
                 st.session_state.get("audit_ip", "Unavailable"),
-                "", "", "", "",
+                "", "", "", "", "",
             ],
             value_input_option="RAW",
             insert_data_option="INSERT_ROWS",
@@ -312,13 +340,21 @@ def clock_out_callback():
             and clock_out_device_id != "Unavailable"
             else "Unknown"
         )
+        start_values = (latest_rows[active_row - 1] + [""] * len(HEADERS))[:len(HEADERS)]
+        start_dt = parse_sheet_datetime(start_values[1], start_values[2])
+        if start_dt is not None and action_time >= start_dt:
+            total_time_text = format_duration((action_time - start_dt).total_seconds())
+        else:
+            total_time_text = "Unavailable"
+
         worksheet.update(
-            range_name=f"J{active_row}:M{active_row}",
+            range_name=f"J{active_row}:N{active_row}",
             values=[[
                 clock_out_device_id,
                 st.session_state.get("audit_browser", "Unavailable"),
                 st.session_state.get("audit_ip", "Unavailable"),
                 mismatch,
+                total_time_text,
             ]],
         )
         st.session_state["last_action_message"] = (

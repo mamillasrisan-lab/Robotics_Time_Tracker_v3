@@ -94,3 +94,374 @@ def parse_sheet_datetime(date_text, time_text):
         try:
             parsed_time = datetime.strptime(time_text, fmt).time()
             break
+        except ValueError:
+            continue
+
+    if parsed_time is None:
+        return None
+
+    return datetime.combine(parsed_date, parsed_time, tzinfo=ZoneInfo(TIMEZONE))
+
+
+def get_active_row(rows, member_name):
+    """Return the most recent active visit row for a member, or None."""
+    active_row = None
+
+    for row_number, row in enumerate(rows[1:], start=2):
+        values = (row + [""] * len(HEADERS))[:len(HEADERS)]
+        if (
+            values[0].strip().casefold() == member_name.casefold()
+            and values[5].strip().casefold() == "clocked in"
+        ):
+            active_row = row_number
+
+    return active_row
+
+
+def format_duration(total_seconds):
+    total_minutes = max(0, int(total_seconds // 60))
+    hours, minutes = divmod(total_minutes, 60)
+    return f"{hours} hr {minutes} min"
+
+
+def visit_end_datetime(values, now):
+    """Get the end time for a visit, using now for a currently active visit."""
+    status = values[5].strip().casefold()
+    if status == "clocked in" or not values[3].strip() or not values[4].strip():
+        return now, True
+
+    end_dt = parse_sheet_datetime(values[3], values[4])
+    return end_dt, False
+
+
+def total_time_for_member(rows, member_name, period_start, period_end, now):
+    """Sum only the part of each visit overlapping the requested period."""
+    total_seconds = 0
+
+    for row in rows[1:]:
+        values = (row + [""] * len(HEADERS))[:len(HEADERS)]
+        if values[0].strip().casefold() != member_name.casefold():
+            continue
+
+        start_dt = parse_sheet_datetime(values[1], values[2])
+        if start_dt is None:
+            continue
+
+        end_dt, _ = visit_end_datetime(values, now)
+        if end_dt is None or end_dt < start_dt:
+            continue
+
+        overlap_start = max(start_dt, period_start)
+        overlap_end = min(end_dt, period_end, now)
+        if overlap_end > overlap_start:
+            total_seconds += (overlap_end - overlap_start).total_seconds()
+
+    return total_seconds
+
+
+# ========================= APP UI =========================
+st.set_page_config(page_title="Robotics Team Time Tracker", page_icon="🕒")
+st.title("Robotics Team Time Tracker")
+st.write(
+    "The home page shows everyone's time for today. Members can clock in or out "
+    "below, and the app resets for the next person after each action."
+)
+
+if not SHEET_URL.startswith("https://docs.google.com/spreadsheets/d/"):
+    st.error("The Google Sheet URL in app.py is not valid.")
+    st.stop()
+
+if not MEMBERS or any(not name.strip() for name in MEMBERS):
+    st.error("Add valid names to the MEMBERS list near the top of app.py.")
+    st.stop()
+
+# Home / Next Person resets the selection fields.
+if st.button("Home / Next Person", use_container_width=True):
+    st.session_state["member_search"] = ""
+    st.session_state["selected_member"] = ""
+    st.session_state["confirm_member"] = False
+    st.rerun()
+
+if st.session_state.get("last_action_message"):
+    st.success(st.session_state.pop("last_action_message"))
+
+try:
+    worksheet = get_worksheet()
+    rows = worksheet.get_all_values()
+except Exception as exc:
+    st.error(
+        "Could not connect to Google Sheets. Check the Sheet URL, Streamlit Secrets, "
+        "and make sure the spreadsheet is shared with the service-account email as Editor."
+    )
+    st.caption(f"Technical detail: {exc}")
+    st.stop()
+
+now = california_now()
+
+# ========================= HOME DASHBOARD =========================
+st.divider()
+st.subheader("Today's Team Time Tracker")
+st.caption(
+    f"Everyone is listed below. Time is calculated using California time for "
+    f"{now.strftime('%B %d, %Y')}."
+)
+
+today_start = datetime.combine(now.date(), time.min, tzinfo=ZoneInfo(TIMEZONE))
+tomorrow_start = today_start + timedelta(days=1)
+today_summary = []
+
+for member in sorted(set(MEMBERS), key=str.casefold):
+    total_seconds = total_time_for_member(
+        rows, member, today_start, tomorrow_start, now
+    )
+    active_row = get_active_row(rows, member)
+
+    active_start_text = "—"
+    if active_row is not None:
+        active_values = (rows[active_row - 1] + [""] * len(HEADERS))[:len(HEADERS)]
+        active_start = parse_sheet_datetime(active_values[1], active_values[2])
+        if active_start:
+            active_start_text = active_start.strftime("%I:%M:%S %p")
+
+    today_summary.append(
+        {
+            "Team Member": member,
+            "Time Today": format_duration(total_seconds),
+            "Status": "Clocked In" if active_row is not None else "Clocked Out",
+            "Current Visit Started": active_start_text,
+        }
+    )
+
+st.dataframe(today_summary, use_container_width=True, hide_index=True)
+
+# ========================= CLOCK IN / CLOCK OUT =========================
+st.divider()
+st.subheader("Clock In or Clock Out")
+
+search_text = st.text_input(
+    "Search for a team member",
+    placeholder="Start typing their name...",
+    key="member_search",
+)
+
+if search_text.strip():
+    matches = [
+        member for member in MEMBERS
+        if search_text.strip().casefold() in member.casefold()
+    ]
+else:
+    matches = sorted(set(MEMBERS), key=str.casefold)
+
+if not matches:
+    st.warning("No matching names found. Check the spelling.")
+else:
+    selected_name = st.selectbox(
+        "Select the full name",
+        [""] + matches,
+        format_func=lambda name: "Choose a name..." if name == "" else name,
+        key="selected_member",
+    )
+
+    if selected_name:
+        confirmed = st.checkbox(
+            f"I confirm that I am {selected_name}",
+            key="confirm_member",
+        )
+
+        if confirmed:
+            # Refresh the rows before deciding which button is available.
+            rows = worksheet.get_all_values()
+            active_row = get_active_row(rows, selected_name)
+
+            if active_row is not None:
+                st.success(f"{selected_name} is currently clocked in.")
+            else:
+                st.info(f"{selected_name} is currently clocked out.")
+
+            col_in, col_out = st.columns(2)
+
+            with col_in:
+                clock_in_clicked = st.button(
+                    "Clock In",
+                    type="primary",
+                    use_container_width=True,
+                    disabled=active_row is not None,
+                )
+
+            with col_out:
+                clock_out_clicked = st.button(
+                    "Clock Out",
+                    use_container_width=True,
+                    disabled=active_row is None,
+                )
+
+            if clock_in_clicked:
+                try:
+                    latest_rows = worksheet.get_all_values()
+                    if get_active_row(latest_rows, selected_name) is not None:
+                        st.warning(f"{selected_name} is already clocked in.")
+                    else:
+                        action_time = california_now()
+                        worksheet.append_row(
+                            [
+                                selected_name,
+                                action_time.strftime("%Y-%m-%d"),
+                                action_time.strftime("%I:%M:%S %p"),
+                                "",
+                                "",
+                                "Clocked In",
+                            ],
+                            value_input_option="RAW",
+                            insert_data_option="INSERT_ROWS",
+                        )
+                        st.session_state["last_action_message"] = (
+                            f"{selected_name} clocked in at "
+                            f"{action_time.strftime('%I:%M:%S %p')} "
+                            f"on {action_time.strftime('%Y-%m-%d')}."
+                        )
+                        st.session_state["member_search"] = ""
+                        st.session_state["selected_member"] = ""
+                        st.session_state["confirm_member"] = False
+                        st.rerun()
+                except Exception as exc:
+                    st.error("Clock-in failed.")
+                    st.caption(f"Technical detail: {exc}")
+
+            if clock_out_clicked:
+                try:
+                    latest_rows = worksheet.get_all_values()
+                    active_row_latest = get_active_row(latest_rows, selected_name)
+
+                    if active_row_latest is None:
+                        st.warning(f"No active clock-in was found for {selected_name}.")
+                    else:
+                        action_time = california_now()
+                        worksheet.update(
+                            range_name=f"D{active_row_latest}:F{active_row_latest}",
+                            values=[[
+                                action_time.strftime("%Y-%m-%d"),
+                                action_time.strftime("%I:%M:%S %p"),
+                                "Clocked Out",
+                            ]],
+                        )
+                        st.session_state["last_action_message"] = (
+                            f"{selected_name} clocked out at "
+                            f"{action_time.strftime('%I:%M:%S %p')} "
+                            f"on {action_time.strftime('%Y-%m-%d')}."
+                        )
+                        st.session_state["member_search"] = ""
+                        st.session_state["selected_member"] = ""
+                        st.session_state["confirm_member"] = False
+                        st.rerun()
+                except Exception as exc:
+                    st.error("Clock-out failed.")
+                    st.caption(f"Technical detail: {exc}")
+        else:
+            st.info("Confirm the selected name to enable Clock In / Clock Out.")
+    else:
+        st.info("Search for a name and select the correct person.")
+
+# ========================= CUSTOM DATE-RANGE REPORT =========================
+st.divider()
+st.subheader("Time Spent Report")
+st.write(
+    "Choose a team member and a date range to see their total recorded time. "
+    "Only the part of each visit that overlaps the selected dates is counted."
+)
+
+report_col1, report_col2 = st.columns(2)
+
+with report_col1:
+    report_member = st.selectbox(
+        "Team member for report",
+        options=sorted(set(MEMBERS), key=str.casefold),
+        key="report_member",
+    )
+
+with report_col2:
+    today_date = california_now().date()
+    first_day_of_month = today_date.replace(day=1)
+    report_dates = st.date_input(
+        "Date range (inclusive)",
+        value=(first_day_of_month, today_date),
+        key="report_dates",
+    )
+
+if isinstance(report_dates, (tuple, list)) and len(report_dates) == 2:
+    range_start, range_end = report_dates
+elif isinstance(report_dates, date):
+    range_start = report_dates
+    range_end = report_dates
+else:
+    range_start = None
+    range_end = None
+
+if range_start and range_end:
+    if range_start > range_end:
+        st.error("The start date must be on or before the end date.")
+    else:
+        range_start_dt = datetime.combine(
+            range_start, time.min, tzinfo=ZoneInfo(TIMEZONE)
+        )
+        range_end_dt = datetime.combine(
+            range_end + timedelta(days=1), time.min, tzinfo=ZoneInfo(TIMEZONE)
+        )
+        report_now = california_now()
+
+        try:
+            report_rows = worksheet.get_all_values()
+        except Exception:
+            report_rows = rows
+
+        report_seconds = total_time_for_member(
+            report_rows,
+            report_member,
+            range_start_dt,
+            range_end_dt,
+            report_now,
+        )
+
+        st.metric(
+            f"Total time for {report_member}",
+            format_duration(report_seconds),
+        )
+        st.caption(
+            f"Dates included: {range_start.strftime('%b %d, %Y')} – "
+            f"{range_end.strftime('%b %d, %Y')} (California time)."
+        )
+
+        visit_details = []
+        for row in report_rows[1:]:
+            values = (row + [""] * len(HEADERS))[:len(HEADERS)]
+            if values[0].strip().casefold() != report_member.casefold():
+                continue
+
+            start_dt = parse_sheet_datetime(values[1], values[2])
+            if start_dt is None:
+                continue
+
+            end_dt, currently_active = visit_end_datetime(values, report_now)
+            if end_dt is None or end_dt < start_dt:
+                continue
+
+            overlap_start = max(start_dt, range_start_dt)
+            overlap_end = min(end_dt, range_end_dt, report_now)
+            seconds = max(0, (overlap_end - overlap_start).total_seconds())
+
+            if seconds > 0:
+                visit_details.append(
+                    {
+                        "Start": start_dt.strftime("%Y-%m-%d %I:%M:%S %p"),
+                        "End": (
+                            "Currently clocked in"
+                            if currently_active
+                            else end_dt.strftime("%Y-%m-%d %I:%M:%S %p")
+                        ),
+                        "Time in Selected Range": format_duration(seconds),
+                    }
+                )
+
+        if visit_details:
+            st.dataframe(visit_details, use_container_width=True, hide_index=True)
+        else:
+            st.info("No recorded time for this person in the selected date range.")

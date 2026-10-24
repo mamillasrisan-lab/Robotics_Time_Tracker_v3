@@ -9,7 +9,7 @@ from pathlib import Path
 # ========================= SETTINGS =========================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1eNZmloz7IozVoU_1cTsKVveUca73VMnjvySR9VMvz_g/edit"
 
-# Replace these sample names with your real team roster.
+# Team Names
 MEMBERS = ["Alex Johnson", "Jordan Smith", "Taylor Lee"]
 
 LOCAL_SERVICE_ACCOUNT_FILE = r"C:\Users\Srithan\service_account.json"

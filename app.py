@@ -261,7 +261,7 @@ def reset_person_selection():
     st.session_state["member_search"] = ""
     st.session_state["selected_member"] = ""
     st.session_state["confirm_member"] = False
-    st.session_state["selected_student_id"] = ""
+    # do not clear the device id here; it should be stored when the click happens
 
 
 def get_selected_student_id():
@@ -299,7 +299,7 @@ def clock_in_callback():
             return
 
         action_time = california_now()
-        student_id = get_selected_student_id()
+        device_id = st.session_state.get("device_id", "Unavailable")
         row = [
             member_name,
             action_time.strftime("%Y-%m-%d"),
@@ -307,7 +307,7 @@ def clock_in_callback():
             "",
             "",
             "Clocked In",
-            student_id,
+            device_id,
             "",
             "",
             "",
@@ -346,7 +346,7 @@ def clock_out_callback():
         end_time = action_time.strftime("%I:%M:%S %p")
 
         clock_in_device_id = old_row[6]
-        clock_out_device_id = get_selected_student_id()
+        clock_out_device_id = st.session_state.get("device_id", "Unavailable")
 
         mismatch = "Unknown"
         if (

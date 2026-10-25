@@ -60,6 +60,32 @@ st.set_page_config(
     layout="wide",
 )
 
+st.markdown(
+    """
+    <style>
+        .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+        .centered-section {
+            max-width: 60%;
+            margin: 0 auto;
+        }
+        @media (max-width: 1100px) {
+            .centered-section {
+                max-width: 100%;
+            }
+        }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+def centered_section():
+    _, center, _ = st.columns([1, 2.2, 1])
+    return center
+
 # ========================= GOOGLE SHEETS =========================
 
 
@@ -408,134 +434,136 @@ def clock_out_callback():
 
 
 def show_task_tracker():
-    st.divider()
-    st.header("Task Tracker")
-    st.write("Create shared tasks, assign them to team members, and track their progress.")
+    center = centered_section()
+    with center:
+        st.divider()
+        st.header("Task Tracker")
+        st.write("Create shared tasks, assign them to team members, and track their progress.")
 
-    member_options = sorted(set(MEMBERS), key=str.casefold)
-    default_creator = st.session_state.get("selected_member", "")
+        member_options = sorted(set(MEMBERS), key=str.casefold)
+        default_creator = st.session_state.get("selected_member", "")
 
-    with st.form("create_task_form", clear_on_submit=True):
-        st.subheader("Create a task")
-        task_title = st.text_input("Task name")
-        task_description = st.text_area("Description (optional)")
+        with st.form("create_task_form", clear_on_submit=True):
+            st.subheader("Create a task")
+            task_title = st.text_input("Task name")
+            task_description = st.text_area("Description (optional)")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            default_creator_index = member_options.index(default_creator) if default_creator in member_options else 0
-            task_creator = st.selectbox("Created by", options=member_options, index=default_creator_index)
-            task_assignee = st.selectbox("Assign to", options=member_options)
-        with col2:
-            task_priority = st.selectbox("Priority", TASK_PRIORITIES, index=1)
-            has_due_date = st.checkbox("Set a due date")
-            task_due_date = st.date_input("Due date", value=california_now().date(), disabled=not has_due_date)
+            col1, col2 = st.columns(2)
+            with col1:
+                default_creator_index = member_options.index(default_creator) if default_creator in member_options else 0
+                task_creator = st.selectbox("Created by", options=member_options, index=default_creator_index)
+                task_assignee = st.selectbox("Assign to", options=member_options)
+            with col2:
+                task_priority = st.selectbox("Priority", TASK_PRIORITIES, index=1)
+                has_due_date = st.checkbox("Set a due date")
+                task_due_date = st.date_input("Due date", value=california_now().date(), disabled=not has_due_date)
 
-        create_task = st.form_submit_button("Create Task", use_container_width=True)
+            create_task = st.form_submit_button("Create Task", use_container_width=True)
 
-    if create_task:
-        if not task_title.strip():
-            st.error("Enter a task name before creating the task.")
-        else:
+        if create_task:
+            if not task_title.strip():
+                st.error("Enter a task name before creating the task.")
+            else:
+                try:
+                    tasks_worksheet = get_tasks_worksheet()
+                    created_at = california_now()
+                    tasks_worksheet.append_row(
+                        [
+                            str(uuid4()),
+                            task_title.strip(),
+                            task_description.strip(),
+                            task_creator,
+                            task_assignee,
+                            task_priority,
+                            task_due_date.strftime("%Y-%m-%d") if has_due_date else "",
+                            "To Do",
+                            created_at.strftime("%Y-%m-%d %I:%M:%S %p"),
+                        ],
+                        value_input_option="RAW",
+                        insert_data_option="INSERT_ROWS",
+                    )
+                    st.cache_data.clear()
+                    st.success(f"Task created and assigned to {task_assignee}.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error("Could not save the task to Google Sheets.")
+                    st.caption(f"Technical detail: {exc}")
+
+        try:
+            task_rows = get_cached_task_rows()
+        except Exception as exc:
+            st.error("Could not load the task board from Google Sheets.")
+            st.caption(f"Technical detail: {exc}")
+            task_rows = [TASK_HEADERS]
+
+        task_records = []
+        task_row_lookup = {}
+        for sheet_row_number, raw_row in enumerate(task_rows[1:], start=2):
+            values = (raw_row + [""] * len(TASK_HEADERS))[: len(TASK_HEADERS)]
+            task_id = values[0].strip()
+            if not task_id:
+                continue
+            task_row_lookup[task_id] = sheet_row_number
+            task_records.append(
+                {
+                    "Task ID": task_id,
+                    "Task": values[1],
+                    "Description": values[2],
+                    "Created By": values[3],
+                    "Assigned To": values[4],
+                    "Priority": values[5],
+                    "Due Date": values[6] or "—",
+                    "Status": values[7] or "To Do",
+                    "Created At": values[8],
+                }
+            )
+
+        if not task_records:
+            st.info("No tasks yet. Create a task above to get started.")
+            return
+
+        filter_col1, filter_col2 = st.columns(2)
+        with filter_col1:
+            status_filter = st.selectbox("Filter tasks by status", ["All statuses"] + TASK_STATUSES, key="task_status_filter")
+        with filter_col2:
+            assignee_filter = st.selectbox("Filter tasks by assignee", ["All members"] + member_options, key="task_assignee_filter")
+
+        visible_tasks = [
+            task
+            for task in task_records
+            if (status_filter == "All statuses" or task["Status"] == status_filter)
+            and (assignee_filter == "All members" or task["Assigned To"] == assignee_filter)
+        ]
+
+        display_tasks = [{key: value for key, value in task.items() if key != "Task ID"} for task in visible_tasks]
+        st.dataframe(display_tasks, use_container_width=True, hide_index=True)
+
+        st.subheader("Update a task's status")
+        task_options = {
+            f'{task["Task"]} — {task["Assigned To"]} [{task["Priority"]}] ({task["Task ID"][:8]})': task["Task ID"]
+            for task in task_records
+        }
+
+        update_col1, update_col2 = st.columns(2)
+        with update_col1:
+            selected_task_label = st.selectbox("Choose a task", options=list(task_options.keys()), key="selected_task_to_update")
+        with update_col2:
+            selected_task_id = task_options[selected_task_label]
+            current_status = next((task["Status"] for task in task_records if task["Task ID"] == selected_task_id), "To Do")
+            status_index = TASK_STATUSES.index(current_status) if current_status in TASK_STATUSES else 0
+            selected_task_status = st.selectbox("New status", options=TASK_STATUSES, index=status_index, key="selected_task_new_status")
+
+        if st.button("Save Task Status", use_container_width=True):
+            target_row = task_row_lookup[selected_task_id]
             try:
                 tasks_worksheet = get_tasks_worksheet()
-                created_at = california_now()
-                tasks_worksheet.append_row(
-                    [
-                        str(uuid4()),
-                        task_title.strip(),
-                        task_description.strip(),
-                        task_creator,
-                        task_assignee,
-                        task_priority,
-                        task_due_date.strftime("%Y-%m-%d") if has_due_date else "",
-                        "To Do",
-                        created_at.strftime("%Y-%m-%d %I:%M:%S %p"),
-                    ],
-                    value_input_option="RAW",
-                    insert_data_option="INSERT_ROWS",
-                )
+                tasks_worksheet.update(range_name=f"H{target_row}", values=[[selected_task_status]])
                 st.cache_data.clear()
-                st.success(f"Task created and assigned to {task_assignee}.")
+                st.success("Task status updated.")
                 st.rerun()
             except Exception as exc:
-                st.error("Could not save the task to Google Sheets.")
+                st.error("Could not update the task status.")
                 st.caption(f"Technical detail: {exc}")
-
-    try:
-        task_rows = get_cached_task_rows()
-    except Exception as exc:
-        st.error("Could not load the task board from Google Sheets.")
-        st.caption(f"Technical detail: {exc}")
-        task_rows = [TASK_HEADERS]
-
-    task_records = []
-    task_row_lookup = {}
-    for sheet_row_number, raw_row in enumerate(task_rows[1:], start=2):
-        values = (raw_row + [""] * len(TASK_HEADERS))[: len(TASK_HEADERS)]
-        task_id = values[0].strip()
-        if not task_id:
-            continue
-        task_row_lookup[task_id] = sheet_row_number
-        task_records.append(
-            {
-                "Task ID": task_id,
-                "Task": values[1],
-                "Description": values[2],
-                "Created By": values[3],
-                "Assigned To": values[4],
-                "Priority": values[5],
-                "Due Date": values[6] or "—",
-                "Status": values[7] or "To Do",
-                "Created At": values[8],
-            }
-        )
-
-    if not task_records:
-        st.info("No tasks yet. Create a task above to get started.")
-        return
-
-    filter_col1, filter_col2 = st.columns(2)
-    with filter_col1:
-        status_filter = st.selectbox("Filter tasks by status", ["All statuses"] + TASK_STATUSES, key="task_status_filter")
-    with filter_col2:
-        assignee_filter = st.selectbox("Filter tasks by assignee", ["All members"] + member_options, key="task_assignee_filter")
-
-    visible_tasks = [
-        task
-        for task in task_records
-        if (status_filter == "All statuses" or task["Status"] == status_filter)
-        and (assignee_filter == "All members" or task["Assigned To"] == assignee_filter)
-    ]
-
-    display_tasks = [{key: value for key, value in task.items() if key != "Task ID"} for task in visible_tasks]
-    st.dataframe(display_tasks, use_container_width=True, hide_index=True)
-
-    st.subheader("Update a task's status")
-    task_options = {
-        f'{task["Task"]} — {task["Assigned To"]} [{task["Priority"]}] ({task["Task ID"][:8]})': task["Task ID"]
-        for task in task_records
-    }
-
-    update_col1, update_col2 = st.columns(2)
-    with update_col1:
-        selected_task_label = st.selectbox("Choose a task", options=list(task_options.keys()), key="selected_task_to_update")
-    with update_col2:
-        selected_task_id = task_options[selected_task_label]
-        current_status = next((task["Status"] for task in task_records if task["Task ID"] == selected_task_id), "To Do")
-        status_index = TASK_STATUSES.index(current_status) if current_status in TASK_STATUSES else 0
-        selected_task_status = st.selectbox("New status", options=TASK_STATUSES, index=status_index, key="selected_task_new_status")
-
-    if st.button("Save Task Status", use_container_width=True):
-        target_row = task_row_lookup[selected_task_id]
-        try:
-            tasks_worksheet = get_tasks_worksheet()
-            tasks_worksheet.update(range_name=f"H{target_row}", values=[[selected_task_status]])
-            st.cache_data.clear()
-            st.success("Task status updated.")
-            st.rerun()
-        except Exception as exc:
-            st.error("Could not update the task status.")
-            st.caption(f"Technical detail: {exc}")
 
 # ========================= APP UI =========================
 
@@ -604,126 +632,131 @@ def app():
     today_start = datetime.combine(now.date(), time.min, tzinfo=ZoneInfo(TIMEZONE))
     tomorrow_start = today_start + timedelta(days=1)
 
-    st.divider()
-    st.subheader("Clock In or Clock Out")
+    clock_col = centered_section()
+    with clock_col:
+        st.divider()
+        st.subheader("Clock In or Clock Out")
 
-    search_text = st.text_input("Search for a team member", placeholder="Start typing their name...", key="member_search")
-    if search_text.strip():
-        matches = [member for member in MEMBERS if search_text.strip().casefold() in member.casefold()]
-    else:
-        matches = sorted(set(MEMBERS), key=str.casefold)
-
-    if not matches:
-        st.warning("No matching names found. Check the spelling.")
-    else:
-        selected_name = st.selectbox(
-            "Select the full name",
-            [""] + matches,
-            format_func=lambda name: "Choose a name..." if name == "" else name,
-            key="selected_member",
-        )
-
-        if selected_name:
-            confirmed = st.checkbox(f"I confirm that I am {selected_name}", key="confirm_member")
-            if confirmed:
-                active_row = get_active_row(rows, selected_name)
-                if active_row is not None:
-                    st.success(f"{selected_name} is currently clocked in.")
-                else:
-                    st.info(f"{selected_name} is currently clocked out.")
-
-                col_in, col_out = st.columns(2)
-                with col_in:
-                    st.button(
-                        "Clock In",
-                        type="primary",
-                        use_container_width=True,
-                        disabled=active_row is not None,
-                        on_click=clock_in_callback,
-                    )
-                with col_out:
-                    st.button(
-                        "Clock Out",
-                        use_container_width=True,
-                        disabled=active_row is None,
-                        on_click=clock_out_callback,
-                    )
-            else:
-                st.info("Confirm the selected name to enable Clock In / Clock Out.")
+        search_text = st.text_input("Search for a team member", placeholder="Start typing their name...", key="member_search")
+        if search_text.strip():
+            matches = [member for member in MEMBERS if search_text.strip().casefold() in member.casefold()]
         else:
-            st.info("Search for a name and select the correct person.")
+            matches = sorted(set(MEMBERS), key=str.casefold)
 
-    st.divider()
+        if not matches:
+            st.warning("No matching names found. Check the spelling.")
+        else:
+            selected_name = st.selectbox(
+                "Select the full name",
+                [""] + matches,
+                format_func=lambda name: "Choose a name..." if name == "" else name,
+                key="selected_member",
+            )
+
+            if selected_name:
+                confirmed = st.checkbox(f"I confirm that I am {selected_name}", key="confirm_member")
+                if confirmed:
+                    active_row = get_active_row(rows, selected_name)
+                    if active_row is not None:
+                        st.success(f"{selected_name} is currently clocked in.")
+                    else:
+                        st.info(f"{selected_name} is currently clocked out.")
+
+                    col_in, col_out = st.columns(2)
+                    with col_in:
+                        st.button(
+                            "Clock In",
+                            type="primary",
+                            use_container_width=True,
+                            disabled=active_row is not None,
+                            on_click=clock_in_callback,
+                        )
+                    with col_out:
+                        st.button(
+                            "Clock Out",
+                            use_container_width=True,
+                            disabled=active_row is None,
+                            on_click=clock_out_callback,
+                        )
+                else:
+                    st.info("Confirm the selected name to enable Clock In / Clock Out.")
+            else:
+                st.info("Search for a name and select the correct person.")
+
     show_task_tracker()
 
-    st.divider()
-    st.subheader("Team Attendance Status")
-    status_df = build_status_dataframe(rows)
-    st.dataframe(status_df, use_container_width=True, hide_index=True)
+    status_col = centered_section()
+    with status_col:
+        st.divider()
+        st.subheader("Team Attendance Status")
+        status_df = build_status_dataframe(rows)
+        st.dataframe(status_df, use_container_width=True, hide_index=True)
 
-    st.divider()
-    st.subheader("Time Spent Report")
-    st.write(
-        "Choose a team member and a date range to see their total recorded time. "
-        "Only the part of each visit that overlaps the selected dates is counted."
-    )
+    report_col = centered_section()
+    with report_col:
+        st.divider()
+        st.subheader("Time Spent Report")
+        st.write(
+            "Choose a team member and a date range to see their total recorded time. "
+            "Only the part of each visit that overlaps the selected dates is counted."
+        )
 
-    report_col1, report_col2 = st.columns(2)
-    with report_col1:
-        report_member = st.selectbox("Team member for report", options=sorted(set(MEMBERS), key=str.casefold), key="report_member")
-    with report_col2:
-        today_date = california_now().date()
-        first_day_of_month = today_date.replace(day=1)
-        report_dates = st.date_input("Date range (inclusive)", value=(first_day_of_month, today_date), key="report_dates")
+        report_member_col, report_date_col = st.columns(2)
+        with report_member_col:
+            report_member = st.selectbox("Team member for report", options=sorted(set(MEMBERS), key=str.casefold), key="report_member")
+        with report_date_col:
+            today_date = california_now().date()
+            first_day_of_month = today_date.replace(day=1)
+            report_dates = st.date_input("Date range (inclusive)", value=(first_day_of_month, today_date), key="report_dates")
 
-    if isinstance(report_dates, (tuple, list)) and len(report_dates) == 2:
-        range_start, range_end = report_dates
-    elif isinstance(report_dates, date):
-        range_start = range_end = report_dates
-    else:
-        range_start = range_end = None
-
-    if range_start and range_end:
-        if range_start > range_end:
-            st.error("The start date must be on or before the end date.")
+        if isinstance(report_dates, (tuple, list)) and len(report_dates) == 2:
+            range_start, range_end = report_dates
+        elif isinstance(report_dates, date):
+            range_start = range_end = report_dates
         else:
-            range_start_dt = datetime.combine(range_start, time.min, tzinfo=ZoneInfo(TIMEZONE))
-            range_end_dt = datetime.combine(range_end + timedelta(days=1), time.min, tzinfo=ZoneInfo(TIMEZONE))
-            report_now = california_now()
-            report_seconds = total_time_for_member(rows, report_member, range_start_dt, range_end_dt, report_now)
-            st.metric(f"Total time for {report_member}", format_duration(report_seconds))
-            st.caption(f"Dates included: {range_start.strftime('%b %d, %Y')} – {range_end.strftime('%b %d, %Y')} (California time).")
+            range_start = range_end = None
 
-            visit_details = []
-            for row in rows[1:]:
-                values = (row + [""] * len(ATTENDANCE_HEADERS))[: len(ATTENDANCE_HEADERS)]
-                if values[0].strip().casefold() != report_member.casefold():
-                    continue
-
-                start_dt = parse_sheet_datetime(values[1], values[2])
-                if start_dt is None:
-                    continue
-
-                end_dt, currently_active = visit_end_datetime(values, report_now)
-                if end_dt is None or end_dt < start_dt:
-                    continue
-
-                overlap_start = max(start_dt, range_start_dt)
-                overlap_end = min(end_dt, range_end_dt, report_now)
-                seconds = max(0, (overlap_end - overlap_start).total_seconds())
-                if seconds > 0:
-                    visit_details.append(
-                        {
-                            "Start": start_dt.strftime("%Y-%m-%d %I:%M:%S %p"),
-                            "End": "Currently clocked in" if currently_active else end_dt.strftime("%Y-%m-%d %I:%M:%S %p"),
-                            "Time in Selected Range": format_duration(seconds),
-                        }
-                    )
-
-            if visit_details:
-                st.dataframe(visit_details, use_container_width=True, hide_index=True)
+        if range_start and range_end:
+            if range_start > range_end:
+                st.error("The start date must be on or before the end date.")
             else:
-                st.info("No recorded time for this person in the selected date range.")
+                range_start_dt = datetime.combine(range_start, time.min, tzinfo=ZoneInfo(TIMEZONE))
+                range_end_dt = datetime.combine(range_end + timedelta(days=1), time.min, tzinfo=ZoneInfo(TIMEZONE))
+                report_now = california_now()
+                report_seconds = total_time_for_member(rows, report_member, range_start_dt, range_end_dt, report_now)
+                st.metric(f"Total time for {report_member}", format_duration(report_seconds))
+                st.caption(f"Dates included: {range_start.strftime('%b %d, %Y')} – {range_end.strftime('%b %d, %Y')} (California time).")
+
+                visit_details = []
+                for row in rows[1:]:
+                    values = (row + [""] * len(ATTENDANCE_HEADERS))[: len(ATTENDANCE_HEADERS)]
+                    if values[0].strip().casefold() != report_member.casefold():
+                        continue
+
+                    start_dt = parse_sheet_datetime(values[1], values[2])
+                    if start_dt is None:
+                        continue
+
+                    end_dt, currently_active = visit_end_datetime(values, report_now)
+                    if end_dt is None or end_dt < start_dt:
+                        continue
+
+                    overlap_start = max(start_dt, range_start_dt)
+                    overlap_end = min(end_dt, range_end_dt, report_now)
+                    seconds = max(0, (overlap_end - overlap_start).total_seconds())
+                    if seconds > 0:
+                        visit_details.append(
+                            {
+                                "Start": start_dt.strftime("%Y-%m-%d %I:%M:%S %p"),
+                                "End": "Currently clocked in" if currently_active else end_dt.strftime("%Y-%m-%d %I:%M:%S %p"),
+                                "Time in Selected Range": format_duration(seconds),
+                            }
+                        )
+
+                if visit_details:
+                    st.dataframe(visit_details, use_container_width=True, hide_index=True)
+                else:
+                    st.info("No recorded time for this person in the selected date range.")
 
 
 if __name__ == "__main__":

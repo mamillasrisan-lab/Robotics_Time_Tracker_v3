@@ -659,7 +659,7 @@ def app():
     st.divider()
     st.subheader("Team Attendance Status")
     status_df = build_status_dataframe(rows)
-    st.bar_chart(status_df.set_index("Member"), height=260)
+    st.dataframe(status_df, use_container_width=True, hide_index=True)
 
     st.divider()
     st.subheader("Time Spent Report")

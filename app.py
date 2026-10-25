@@ -64,7 +64,7 @@ st.markdown(
     """
     <style>
         .stApp {
-            background: linear-gradient(180deg, #0e2d6b 0%, #183f90 35%, #f7d64a 100%);
+            background: linear-gradient(180deg, #0f2d96 0%, #163db2 35%, #102c80 100%);
             color: #f9fbff;
         }
 
@@ -89,7 +89,9 @@ st.markdown(
         div[data-testid="stForm"],
         div[data-testid="stExpander"],
         div[data-testid="stAlert"] {
+            border: 2px solid #f4d43a;
             border-radius: 14px;
+            box-shadow: 0 0 0 1px rgba(244, 212, 58, 0.35);
         }
 
         .stTextInput > div > div > input,
@@ -98,34 +100,37 @@ st.markdown(
         .stDateInput > div > div,
         .stCheckbox {
             background: rgba(255,255,255,0.95);
+            border: 1px solid #f4d43a;
             border-radius: 10px;
         }
 
         .stButton > button {
-            background: #f7d64a;
-            color: #0f2d69;
-            border: 1px solid #e7c93a;
+            background: #f4d43a;
+            color: #102d7d;
+            border: 2px solid #f4d43a;
             border-radius: 12px;
             font-weight: 700;
         }
 
         .stButton > button:hover {
-            background: #f5cf2e;
+            background: #f6dc5f;
             color: #0d234d;
+            border-color: #f6dc5f;
         }
 
         h1, h2, h3, h4, h5, h6 {
-            color: #f7d64a;
+            color: #f4d43a;
         }
 
         .stDataFrame, .stTable {
             background: rgba(255,255,255,0.93);
+            border: 1px solid #f4d43a;
             border-radius: 12px;
         }
 
         .stMetric {
             background: rgba(255,255,255,0.12);
-            border: 1px solid rgba(255,255,255,0.2);
+            border: 1px solid #f4d43a;
             border-radius: 12px;
             padding: 0.8rem;
         }

@@ -31,9 +31,6 @@ ATTENDANCE_HEADERS = [
     "End Date",
     "End Time",
     "Status",
-    "Clock In Device ID",
-    "Clock Out Device ID",
-    "Device Mismatch",
     "Total Time Spent",
 ]
 
@@ -220,10 +217,10 @@ def backfill_missing_visit_totals(worksheet):
         updates = []
         for row_number, row in enumerate(rows[1:], start=2):
             values = (row + [""] * len(ATTENDANCE_HEADERS))[: len(ATTENDANCE_HEADERS)]
-            if len(values) < 10:
+            if len(values) < 7:
                 continue
 
-            if values[9].strip():
+            if values[6].strip():
                 continue
 
             if values[5].strip().casefold() != "clocked out":
@@ -235,7 +232,7 @@ def backfill_missing_visit_totals(worksheet):
                 continue
 
             updates.append({
-                "range": f"J{row_number}",
+                "range": f"G{row_number}",
                 "values": [[format_duration((end_dt - start_dt).total_seconds())]],
             })
 
@@ -250,15 +247,6 @@ def reset_person_selection():
     st.session_state["member_search"] = ""
     st.session_state["selected_member"] = ""
     st.session_state["confirm_member"] = False
-
-# ========================= DEVICE REGISTRATION =========================
-
-def get_device_metadata():
-    device_id = st.session_state.get("device_id")
-    if not device_id:
-        device_id = f"device-{uuid4()}"
-        st.session_state["device_id"] = device_id
-    return device_id
 
 # ========================= CLOCK ACTIONS =========================
 
@@ -275,7 +263,6 @@ def clock_in_callback():
             return
 
         action_time = california_now()
-        device_id = st.session_state.get("device_id", "Unavailable")
         row = [
             member_name,
             action_time.strftime("%Y-%m-%d"),
@@ -283,9 +270,6 @@ def clock_in_callback():
             "",
             "",
             "Clocked In",
-            device_id,
-            "",
-            "",
             "",
         ]
 
@@ -318,18 +302,6 @@ def clock_out_callback():
         end_date = action_time.strftime("%Y-%m-%d")
         end_time = action_time.strftime("%I:%M:%S %p")
 
-        clock_in_device_id = old_row[6]
-        clock_out_device_id = st.session_state.get("device_id", "Unavailable")
-
-        mismatch = "Unknown"
-        if (
-            clock_in_device_id
-            and clock_out_device_id
-            and clock_in_device_id != "Unavailable"
-            and clock_out_device_id != "Unavailable"
-        ):
-            mismatch = "Yes" if clock_in_device_id != clock_out_device_id else "No"
-
         total_time_text = "Unavailable"
         if start_dt is not None and action_time >= start_dt:
             total_time_text = format_duration((action_time - start_dt).total_seconds())
@@ -339,8 +311,8 @@ def clock_out_callback():
             values=[[end_date, end_time, "Clocked Out"]],
         )
         worksheet.update(
-            range_name=f"H{active_row}:J{active_row}",
-            values=[[clock_out_device_id, mismatch, total_time_text]],
+            range_name=f"G{active_row}",
+            values=[[total_time_text]],
         )
 
         st.session_state["last_action_message"] = (
@@ -489,35 +461,6 @@ def app():
         "Each new visit is saved as a separate row. Track attendance, review time reports, "
         "and manage shared team tasks. Time is recorded in California time."
     )
-
-    device_id = get_device_metadata()
-    if device_id:
-        safe_device_id = html.escape(device_id)
-        st.markdown(
-            f"""
-            <div style="
-                position: fixed;
-                top: 0.8rem;
-                right: 1.2rem;
-                z-index: 999999;
-                text-align: right;
-                font-size: 0.78rem;
-                line-height: 1.25;
-                background: rgba(255,255,255,0.94);
-                color: #222;
-                padding: 0.4rem 0.65rem;
-                border-radius: 0.45rem;
-                border: 1px solid rgba(128,128,128,0.30);
-                box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-                max-width: 45%;
-                overflow-wrap: anywhere;
-            ">
-                <b>Registered Device</b><br>
-                <span style="font-family: monospace;">{safe_device_id}</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
 
     if not SHEET_URL.startswith("https://docs.google.com/spreadsheets/d/"):
         st.error("The Google Sheet URL in app.py is not valid.")

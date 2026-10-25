@@ -6,6 +6,7 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import gspread
+import pandas as pd
 import streamlit as st
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import APIError, WorksheetNotFound
@@ -32,6 +33,9 @@ ATTENDANCE_HEADERS = [
     "End Date",
     "End Time",
     "Status",
+    "Clock In Device ID",
+    "Clock Out Device ID",
+    "Device Mismatch",
     "Total Time Spent",
 ]
 
@@ -251,10 +255,10 @@ def backfill_missing_visit_totals(worksheet):
         updates = []
         for row_number, row in enumerate(rows[1:], start=2):
             values = (row + [""] * len(ATTENDANCE_HEADERS))[: len(ATTENDANCE_HEADERS)]
-            if len(values) < 7:
+            if len(values) < 10:
                 continue
 
-            if values[6].strip():
+            if values[9].strip():
                 continue
 
             if values[5].strip().casefold() != "clocked out":
@@ -266,7 +270,7 @@ def backfill_missing_visit_totals(worksheet):
                 continue
 
             updates.append({
-                "range": f"G{row_number}",
+                "range": f"J{row_number}",
                 "values": [[format_duration((end_dt - start_dt).total_seconds())]],
             })
 
@@ -275,6 +279,20 @@ def backfill_missing_visit_totals(worksheet):
     except Exception:
         pass
 
+
+def build_status_dataframe(rows):
+    chart_rows = []
+    for member in sorted(set(MEMBERS), key=str.casefold):
+        active_row = get_active_row(rows, member)
+        chart_rows.append(
+            {
+                "Member": member,
+                "Clocked In": 1 if active_row is not None else 0,
+                "Clocked Out": 1 if active_row is None else 0,
+            }
+        )
+    return pd.DataFrame(chart_rows)
+
 # ========================= SELECTION HELPERS =========================
 
 
@@ -282,6 +300,16 @@ def reset_person_selection():
     st.session_state["member_search"] = ""
     st.session_state["selected_member"] = ""
     st.session_state["confirm_member"] = False
+
+# ========================= DEVICE REGISTRATION =========================
+
+
+def get_device_metadata():
+    device_id = st.session_state.get("device_id")
+    if not device_id:
+        device_id = f"device-{uuid4()}"
+        st.session_state["device_id"] = device_id
+    return device_id
 
 # ========================= CLOCK ACTIONS =========================
 
@@ -299,6 +327,7 @@ def clock_in_callback():
             return
 
         action_time = california_now()
+        device_id = st.session_state.get("device_id", "Unavailable")
         row = [
             member_name,
             action_time.strftime("%Y-%m-%d"),
@@ -306,6 +335,9 @@ def clock_in_callback():
             "",
             "",
             "Clocked In",
+            device_id,
+            "",
+            "",
             "",
         ]
 
@@ -339,6 +371,18 @@ def clock_out_callback():
         end_date = action_time.strftime("%Y-%m-%d")
         end_time = action_time.strftime("%I:%M:%S %p")
 
+        clock_in_device_id = old_row[6]
+        clock_out_device_id = st.session_state.get("device_id", "Unavailable")
+
+        mismatch = "Unknown"
+        if (
+            clock_in_device_id
+            and clock_out_device_id
+            and clock_in_device_id != "Unavailable"
+            and clock_out_device_id != "Unavailable"
+        ):
+            mismatch = "Yes" if clock_in_device_id != clock_out_device_id else "No"
+
         total_time_text = "Unavailable"
         if start_dt is not None and action_time >= start_dt:
             total_time_text = format_duration((action_time - start_dt).total_seconds())
@@ -348,8 +392,8 @@ def clock_out_callback():
             values=[[end_date, end_time, "Clocked Out"]],
         )
         worksheet.update(
-            range_name=f"G{active_row}",
-            values=[[total_time_text]],
+            range_name=f"H{active_row}:J{active_row}",
+            values=[[clock_out_device_id, mismatch, total_time_text]],
         )
 
         st.cache_data.clear()
@@ -504,6 +548,35 @@ def app():
         "and manage shared team tasks. Time is recorded in California time."
     )
 
+    device_id = get_device_metadata()
+    if device_id:
+        safe_device_id = html.escape(device_id)
+        st.markdown(
+            f"""
+            <div style="
+                position: fixed;
+                top: 0.8rem;
+                right: 1.2rem;
+                z-index: 999999;
+                text-align: right;
+                font-size: 0.78rem;
+                line-height: 1.25;
+                background: rgba(255,255,255,0.94);
+                color: #222;
+                padding: 0.4rem 0.65rem;
+                border-radius: 0.45rem;
+                border: 1px solid rgba(128,128,128,0.30);
+                box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+                max-width: 45%;
+                overflow-wrap: anywhere;
+            ">
+                <b>Registered Device</b><br>
+                <span style="font-family: monospace;">{safe_device_id}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
     if not SHEET_URL.startswith("https://docs.google.com/spreadsheets/d/"):
         st.error("The Google Sheet URL in app.py is not valid.")
         st.stop()
@@ -530,33 +603,6 @@ def app():
     now = california_now()
     today_start = datetime.combine(now.date(), time.min, tzinfo=ZoneInfo(TIMEZONE))
     tomorrow_start = today_start + timedelta(days=1)
-
-    st.divider()
-    st.subheader("Today's Team Time Tracker")
-    st.caption(f"Time is calculated using California time for {now.strftime('%B %d, %Y')}.")
-
-    today_summary = []
-    for member in sorted(set(MEMBERS), key=str.casefold):
-        total_seconds = total_time_for_member(rows, member, today_start, tomorrow_start, now)
-        active_row = get_active_row(rows, member)
-        active_start_text = "—"
-
-        if active_row is not None:
-            active_values = (rows[active_row - 1] + [""] * len(ATTENDANCE_HEADERS))[: len(ATTENDANCE_HEADERS)]
-            active_start = parse_sheet_datetime(active_values[1], active_values[2])
-            if active_start:
-                active_start_text = active_start.strftime("%I:%M:%S %p")
-
-        today_summary.append(
-            {
-                "Team Member": member,
-                "Time Today": format_duration(total_seconds),
-                "Status": "Clocked In" if active_row is not None else "Clocked Out",
-                "Current Visit Started": active_start_text,
-            }
-        )
-
-    st.dataframe(today_summary, use_container_width=True, hide_index=True)
 
     st.divider()
     st.subheader("Clock In or Clock Out")
@@ -606,6 +652,14 @@ def app():
                 st.info("Confirm the selected name to enable Clock In / Clock Out.")
         else:
             st.info("Search for a name and select the correct person.")
+
+    st.divider()
+    show_task_tracker()
+
+    st.divider()
+    st.subheader("Team Attendance Status")
+    status_df = build_status_dataframe(rows)
+    st.bar_chart(status_df.set_index("Member"), height=260)
 
     st.divider()
     st.subheader("Time Spent Report")
@@ -670,8 +724,6 @@ def app():
                 st.dataframe(visit_details, use_container_width=True, hide_index=True)
             else:
                 st.info("No recorded time for this person in the selected date range.")
-
-    show_task_tracker()
 
 
 if __name__ == "__main__":

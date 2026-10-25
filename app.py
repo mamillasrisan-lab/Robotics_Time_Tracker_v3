@@ -63,18 +63,71 @@ st.set_page_config(
 st.markdown(
     """
     <style>
+        .stApp {
+            background: linear-gradient(180deg, #0e2d6b 0%, #183f90 35%, #f7d64a 100%);
+            color: #f9fbff;
+        }
+
         .block-container {
             padding-top: 2rem;
             padding-bottom: 2rem;
         }
+
         .centered-section {
-            max-width: 60%;
+            max-width: 62%;
             margin: 0 auto;
         }
+
         @media (max-width: 1100px) {
             .centered-section {
                 max-width: 100%;
             }
+        }
+
+        div[data-testid="stDataFrame"],
+        div[data-testid="stVerticalBlock"],
+        div[data-testid="stForm"],
+        div[data-testid="stExpander"],
+        div[data-testid="stAlert"] {
+            border-radius: 14px;
+        }
+
+        .stTextInput > div > div > input,
+        .stTextArea > div > div > textarea,
+        .stSelectbox > div > div,
+        .stDateInput > div > div,
+        .stCheckbox {
+            background: rgba(255,255,255,0.95);
+            border-radius: 10px;
+        }
+
+        .stButton > button {
+            background: #f7d64a;
+            color: #0f2d69;
+            border: 1px solid #e7c93a;
+            border-radius: 12px;
+            font-weight: 700;
+        }
+
+        .stButton > button:hover {
+            background: #f5cf2e;
+            color: #0d234d;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            color: #f7d64a;
+        }
+
+        .stDataFrame, .stTable {
+            background: rgba(255,255,255,0.93);
+            border-radius: 12px;
+        }
+
+        .stMetric {
+            background: rgba(255,255,255,0.12);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 12px;
+            padding: 0.8rem;
         }
     </style>
     """,
@@ -456,7 +509,10 @@ def show_task_tracker():
             with col2:
                 task_priority = st.selectbox("Priority", TASK_PRIORITIES, index=1)
                 has_due_date = st.checkbox("Set a due date")
-                task_due_date = st.date_input("Due date", value=california_now().date(), disabled=not has_due_date)
+                if has_due_date:
+                    task_due_date = st.date_input("Due date", value=california_now().date())
+                else:
+                    task_due_date = ""
 
             create_task = st.form_submit_button("Create Task", use_container_width=True)
 
@@ -475,7 +531,7 @@ def show_task_tracker():
                             task_creator,
                             task_assignee,
                             task_priority,
-                            task_due_date.strftime("%Y-%m-%d") if has_due_date else "",
+                            task_due_date.strftime("%Y-%m-%d") if has_due_date and task_due_date else "",
                             "To Do",
                             created_at.strftime("%Y-%m-%d %I:%M:%S %p"),
                         ],

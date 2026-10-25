@@ -1,6 +1,7 @@
 import html
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
+from time import sleep
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -56,6 +57,7 @@ st.set_page_config(
 )
 
 # ========================= GOOGLE SHEETS =========================
+
 
 def get_credentials():
     scopes = [
@@ -125,7 +127,38 @@ def get_attendance_worksheet():
 def get_tasks_worksheet():
     return get_or_create_worksheet(TASKS_WORKSHEET, TASK_HEADERS)
 
+
+def sheet_read_with_retry(worksheet, retries=3):
+    last_error = None
+    for attempt in range(retries):
+        try:
+            return worksheet.get_all_values()
+        except APIError as exc:
+            last_error = exc
+            response = getattr(exc, "response", None)
+            status_code = getattr(response, "status_code", None)
+            if status_code == 429:
+                sleep(2 ** attempt)
+                continue
+            raise
+    if last_error is not None:
+        raise last_error
+    return []
+
+
+@st.cache_data(ttl=10)
+def get_cached_attendance_rows():
+    worksheet = get_attendance_worksheet()
+    return sheet_read_with_retry(worksheet)
+
+
+@st.cache_data(ttl=10)
+def get_cached_task_rows():
+    worksheet = get_tasks_worksheet()
+    return sheet_read_with_retry(worksheet)
+
 # ========================= TIME HELPERS =========================
+
 
 def california_now():
     return datetime.now(ZoneInfo(TIMEZONE))
@@ -170,6 +203,7 @@ def format_duration(total_seconds):
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 # ========================= ATTENDANCE HELPERS =========================
+
 
 def get_active_row(rows, member_name):
     active_row = None
@@ -243,12 +277,14 @@ def backfill_missing_visit_totals(worksheet):
 
 # ========================= SELECTION HELPERS =========================
 
+
 def reset_person_selection():
     st.session_state["member_search"] = ""
     st.session_state["selected_member"] = ""
     st.session_state["confirm_member"] = False
 
 # ========================= CLOCK ACTIONS =========================
+
 
 def clock_in_callback():
     member_name = st.session_state.get("selected_member", "")
@@ -257,7 +293,7 @@ def clock_in_callback():
 
     try:
         worksheet = get_attendance_worksheet()
-        rows = worksheet.get_all_values()
+        rows = sheet_read_with_retry(worksheet)
         if get_active_row(rows, member_name) is not None:
             st.session_state["last_action_message"] = f"{member_name} is already clocked in."
             return
@@ -274,6 +310,7 @@ def clock_in_callback():
         ]
 
         worksheet.append_row(row, value_input_option="RAW", insert_data_option="INSERT_ROWS")
+        st.cache_data.clear()
         st.session_state["last_action_message"] = (
             f"{member_name} clocked in at {action_time.strftime('%I:%M:%S %p')} on {action_time.strftime('%Y-%m-%d')}."
         )
@@ -289,7 +326,7 @@ def clock_out_callback():
 
     try:
         worksheet = get_attendance_worksheet()
-        rows = worksheet.get_all_values()
+        rows = sheet_read_with_retry(worksheet)
         active_row = get_active_row(rows, member_name)
         if active_row is None:
             st.session_state["last_action_message"] = f"No active clock-in was found for {member_name}."
@@ -315,6 +352,7 @@ def clock_out_callback():
             values=[[total_time_text]],
         )
 
+        st.cache_data.clear()
         st.session_state["last_action_message"] = (
             f"{member_name} clocked out at {action_time.strftime('%I:%M:%S %p')} on {action_time.strftime('%Y-%m-%d')}."
         )
@@ -323,6 +361,7 @@ def clock_out_callback():
         st.session_state["last_action_message"] = f"Clock-out failed: {exc}"
 
 # ========================= TASK TRACKER =========================
+
 
 def show_task_tracker():
     st.divider()
@@ -371,6 +410,7 @@ def show_task_tracker():
                     value_input_option="RAW",
                     insert_data_option="INSERT_ROWS",
                 )
+                st.cache_data.clear()
                 st.success(f"Task created and assigned to {task_assignee}.")
                 st.rerun()
             except Exception as exc:
@@ -378,8 +418,7 @@ def show_task_tracker():
                 st.caption(f"Technical detail: {exc}")
 
     try:
-        tasks_worksheet = get_tasks_worksheet()
-        task_rows = tasks_worksheet.get_all_values()
+        task_rows = get_cached_task_rows()
     except Exception as exc:
         st.error("Could not load the task board from Google Sheets.")
         st.caption(f"Technical detail: {exc}")
@@ -445,7 +484,9 @@ def show_task_tracker():
     if st.button("Save Task Status", use_container_width=True):
         target_row = task_row_lookup[selected_task_id]
         try:
+            tasks_worksheet = get_tasks_worksheet()
             tasks_worksheet.update(range_name=f"H{target_row}", values=[[selected_task_status]])
+            st.cache_data.clear()
             st.success("Task status updated.")
             st.rerun()
         except Exception as exc:
@@ -453,6 +494,7 @@ def show_task_tracker():
             st.caption(f"Technical detail: {exc}")
 
 # ========================= APP UI =========================
+
 
 def app():
     st.title("Robotics Team Time Tracker")
@@ -477,8 +519,7 @@ def app():
         st.success(st.session_state.pop("last_action_message"))
 
     try:
-        worksheet = get_attendance_worksheet()
-        rows = worksheet.get_all_values()
+        rows = get_cached_attendance_rows()
     except Exception as exc:
         st.error(
             "Could not connect to Google Sheets. Check the Sheet URL, Streamlit Secrets, and make sure the spreadsheet is shared with the service-account email as Editor."

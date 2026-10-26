@@ -89,8 +89,13 @@ st.markdown(
         div[data-testid="stVerticalBlock"],
         div[data-testid="stForm"],
         div[data-testid="stExpander"],
-        div[data-testid="stAlert"] {
-            border-radius: 14px;
+        div[data-testid="stAlert"],
+        [data-testid="stVerticalBlock"] > div,
+        [data-testid="stDataFrame"] > div {
+            background: #0d2d63 !important;
+            border: 1px solid rgba(143, 172, 214, 0.35) !important;
+            border-radius: 14px !important;
+            color: #edf6ff !important;
         }
 
         .stTextInput > div > div > input,
@@ -100,15 +105,15 @@ st.markdown(
         .stCheckbox,
         div[data-baseweb="select"] > div,
         div[data-baseweb="input"] > div {
-            background: #cfe3ff !important;
-            border: 1px solid #9db9e7 !important;
+            background: #dfeeff !important;
+            border: 1px solid #a8c2ee !important;
             border-radius: 10px !important;
-            color: #0f172a !important;
+            color: #0b1730 !important;
         }
 
         .stTextInput > div > div > input::placeholder,
         .stTextArea > div > div > textarea::placeholder {
-            color: #233f73 !important;
+            color: #203d75 !important;
             opacity: 1 !important;
         }
 
@@ -125,8 +130,15 @@ st.markdown(
             color: #0d234d;
         }
 
-        h1, h2, h3, h4, h5, h6 {
-            color: #f7d64a;
+        h1, h2, h3, h4, h5, h6,
+        .stMarkdown p,
+        .stMarkdown li,
+        label,
+        .stSelectbox > label,
+        .stTextInput > label,
+        .stTextArea > label,
+        .stDateInput > label {
+            color: #edf6ff !important;
         }
 
         .stDataFrame, .stTable {

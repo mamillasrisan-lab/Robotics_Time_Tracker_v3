@@ -580,8 +580,8 @@ def app():
         st.error("Add valid names to the MEMBERS list near the top of app.py.")
         st.stop()
 
-    if st.button("Home / Next Person", use_container_width=True, on_click=reset_person_selection):
-        st.rerun()
+   # if st.button("Home / Next Person", use_container_width=True, on_click=reset_person_selection):
+      #  st.rerun()
 
     if st.session_state.get("last_action_message"):
         st.success(st.session_state.pop("last_action_message"))

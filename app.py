@@ -19,7 +19,9 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/1eNZmloz7IozVoU_1cTsKVveUca7
 MEMBERS = [
     "Alex Johnson",
     "Jordan Smith",
-    "Taylor Lee",
+    "Taylor Lee"
+    "Test User 1"
+    "Test User 2",
 ]
 
 LOCAL_SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", r"C:\Users\Srithan\service_account.json")

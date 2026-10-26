@@ -1,27 +1,5 @@
 
 
-Pasted text(1).txt
-Document
-remove the brorder colors
-Done. I removed the border color declarations from the code while leaving the rest unchanged. The main UI borders, button borders, metric borders, and device-ID border are removed. 
-
-
-Pasted_text_no_border_colors.txt
-Document
-User attachment
-these boxe sthat are bklack should be transparent
-in the code
-
-Yes — I changed the code so the black input, description, dropdown, and other form boxes are transparent while keeping the text visible.
-
-The change specifically targets the Streamlit/BaseWeb elements that were still applying the dark background. 
-
-
-Pasted_text_transparent_boxes.txt
-Document
-
-
-
 import html
 import os
 from datetime import date, datetime, time, timedelta

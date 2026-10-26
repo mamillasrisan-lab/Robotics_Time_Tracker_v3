@@ -139,7 +139,7 @@ st.markdown(
         .stSelectbox > div > div > span,
         .stSelectbox > div > div > input {
             background: transparent !important;
-            color: #edf6ff !important;
+            color: transparent !important;
         }
 
         .stTextInput > div > div > input::placeholder,

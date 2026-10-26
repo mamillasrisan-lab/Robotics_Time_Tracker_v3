@@ -97,10 +97,19 @@ st.markdown(
         .stTextArea > div > div > textarea,
         .stSelectbox > div > div,
         .stDateInput > div > div,
-        .stCheckbox {
-            background: #dfeeff !important;
-            border-radius: 10px;
-            border: 1px solid #cfe0ff;
+        .stCheckbox,
+        div[data-baseweb="select"] > div,
+        div[data-baseweb="input"] > div {
+            background: #cfe3ff !important;
+            border: 1px solid #9db9e7 !important;
+            border-radius: 10px !important;
+            color: #0f172a !important;
+        }
+
+        .stTextInput > div > div > input::placeholder,
+        .stTextArea > div > div > textarea::placeholder {
+            color: #233f73 !important;
+            opacity: 1 !important;
         }
 
         .stButton > button {

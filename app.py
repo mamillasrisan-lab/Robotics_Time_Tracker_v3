@@ -1,4 +1,5 @@
 import html
+import os
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from time import sleep
@@ -21,7 +22,7 @@ MEMBERS = [
     "Taylor Lee",
 ]
 
-LOCAL_SERVICE_ACCOUNT_FILE = r"C:\Users\Srithan\service_account.json"
+LOCAL_SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", r"C:\Users\Srithan\service_account.json")
 ATTENDANCE_WORKSHEET = "Attendance"
 TASKS_WORKSHEET = "Tasks"
 TIMEZONE = "America/Los_Angeles"
@@ -146,16 +147,31 @@ def get_sheet_client():
     if not SHEET_URL.startswith("https://docs.google.com/spreadsheets/d/"):
         raise ValueError("The Google Sheet URL in app.py is not valid.")
 
-    service_account_path = Path(LOCAL_SERVICE_ACCOUNT_FILE)
-    if not service_account_path.exists():
-        raise FileNotFoundError(f"Google service account file not found at: {LOCAL_SERVICE_ACCOUNT_FILE}")
+    scopes = ["https://spreadsheets.google.com/feeds"]
 
-    creds = Credentials.from_service_account_file(
-        str(service_account_path),
-        scopes=["https://spreadsheets.google.com/feeds"],
+    try:
+        service_account_info = st.secrets["google_service_account"]
+        creds = Credentials.from_service_account_info(service_account_info, scopes=scopes)
+        client = gspread.authorize(creds)
+        return client.open_by_url(SHEET_URL)
+    except Exception:
+        pass
+
+    env_path = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE")
+    if env_path:
+        creds = Credentials.from_service_account_file(env_path, scopes=scopes)
+        client = gspread.authorize(creds)
+        return client.open_by_url(SHEET_URL)
+
+    service_account_path = Path(LOCAL_SERVICE_ACCOUNT_FILE)
+    if service_account_path.exists():
+        creds = Credentials.from_service_account_file(str(service_account_path), scopes=scopes)
+        client = gspread.authorize(creds)
+        return client.open_by_url(SHEET_URL)
+
+    raise FileNotFoundError(
+        "Google service account file not found. Set GOOGLE_SERVICE_ACCOUNT_FILE or add a `google_service_account` entry in Streamlit secrets."
     )
-    client = gspread.authorize(creds)
-    return client.open_by_url(SHEET_URL)
 
 
 def get_attendance_worksheet():

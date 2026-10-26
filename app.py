@@ -58,7 +58,7 @@ TASK_STATUSES = ["To Do", "In Progress", "Blocked", "Completed"]
 TASK_PRIORITIES = ["Low", "Medium", "High", "Urgent"]
 
 st.set_page_config(
-    page_title="Robotics Team Time Tracker",
+    page_title="HOSA Team Time Tracker",
     page_icon="🕒",
     layout="wide",
 )
@@ -537,7 +537,7 @@ def show_task_tracker():
 
 
 def app():
-    st.title("Robotics Team Time Tracker")
+    st.title("HOSA Tracker")
     st.write(
         "The home page shows everyone's time for today. Members can clock in or out below. "
         "Attendance will be tracked, and you can review the total amount of time members spent. "

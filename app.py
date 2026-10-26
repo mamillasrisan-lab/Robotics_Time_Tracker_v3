@@ -111,6 +111,20 @@ st.markdown(
             color: #0f172a !important;
         }
 
+        .stTextInput input,
+        .stTextArea textarea,
+        .stDateInput input,
+        .stNumberInput input,
+        .stSelectbox [role="combobox"],
+        .stSelectbox div[role="button"],
+        .stSelectbox [data-baseweb="select"] > div,
+        .stSelectbox [data-baseweb="select"] span,
+        .stSelectbox [data-baseweb="popover"] *,
+        .stSelectbox [data-baseweb="popover"] span,
+        .stSelectbox [data-baseweb="popover"] div {
+            color: #000000 !important;
+        }
+
         .stTextInput > div > div > input::placeholder,
         .stTextArea > div > div > textarea::placeholder {
             color: #495774 !important;

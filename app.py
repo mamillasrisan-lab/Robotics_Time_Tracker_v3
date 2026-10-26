@@ -115,13 +115,16 @@ st.markdown(
         .stTextArea textarea,
         .stDateInput input,
         .stNumberInput input,
+        .stDateInput [data-baseweb="input"] input,
         .stSelectbox [role="combobox"],
         .stSelectbox div[role="button"],
         .stSelectbox [data-baseweb="select"] > div,
         .stSelectbox [data-baseweb="select"] span,
         .stSelectbox [data-baseweb="popover"] *,
         .stSelectbox [data-baseweb="popover"] span,
-        .stSelectbox [data-baseweb="popover"] div {
+        .stSelectbox [data-baseweb="popover"] div,
+        .stDateInput [data-baseweb="select"] span,
+        .stDateInput [data-baseweb="popover"] * {
             color: #000000 !important;
         }
 
@@ -152,7 +155,7 @@ st.markdown(
         .stTextInput > label,
         .stTextArea > label,
         .stDateInput > label {
-            color: #edf6ff !important;
+            color: transparent !important;
         }
 
         .stDataFrame, .stTable {

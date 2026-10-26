@@ -95,29 +95,28 @@ st.markdown(
             background: transparent !important;
             border: 1px solid rgba(255, 255, 255, 0.22) !important;
             border-radius: 14px !important;
-            color: transparent !important;
+            color: #edf6ff !important;
         }
 
-        .stTextInput > div > div,
-        .stTextArea > div > div,
-        .stSelectbox > div > div,
-        .stDateInput > div > div,
-        .stNumberInput > div > div,
-        .stCheckbox > div,
+        div[data-testid="stTextArea"] > div > div > textarea,
+        div[data-testid="stTextArea"] textarea,
+        div[data-testid="stTextInput"] input,
+        div[data-testid="stSelectbox"] input,
+        div[data-testid="stSelectbox"] > div,
+        div[data-testid="stDateInput"] input,
+        div[data-testid="stCheckbox"] input,
         div[data-baseweb="select"] > div,
         div[data-baseweb="input"] > div,
+        div[role="textbox"],
         div[role="button"],
         div[role="combobox"],
-        input,
         textarea,
-        select,
-        div[role="listbox"],
-        ul[role="listbox"],
-        div[role="option"] {
-            background: transparent !important;
-            border: 1px solid rgba(255, 255, 255, 0.22) !important;
+        input,
+        select {
+            background: rgba(255, 255, 255, 0.04) !important;
+            border: 1px solid rgba(255, 255, 255, 0.28) !important;
             border-radius: 10px !important;
-            color: transparent !important;
+            color: #edf6ff !important;
             box-shadow: none !important;
         }
 
@@ -130,16 +129,10 @@ st.markdown(
         .stSelectbox div[role="button"],
         .stSelectbox [data-baseweb="select"] > div,
         .stSelectbox [data-baseweb="select"] span,
-        .stSelectbox [data-baseweb="popover"] *,
-        .stSelectbox [data-baseweb="popover"] span,
-        .stSelectbox [data-baseweb="popover"] div,
         .stDateInput [data-baseweb="select"] span,
-        .stDateInput [data-baseweb="popover"] *,
-        .stSelectbox > div > div > div,
-        .stSelectbox > div > div > span,
-        .stSelectbox > div > div > input {
-            background: transparent !important;
-            color: transparent !important;
+        .stTextInput > div > div > input::placeholder,
+        .stTextArea > div > div > textarea::placeholder {
+            color: #edf6ff !important;
         }
 
         .stTextInput > div > div > input::placeholder,
@@ -149,16 +142,16 @@ st.markdown(
         }
 
         .stButton > button {
-            background: transparent !important;
-            color: transparent !important;
-            border: 1px solid rgba(255, 255, 255, 0.3) !important;
-            border-radius: 12px;
-            font-weight: 700;
+            background: #f7d64a !important;
+            color: #0f2d69 !important;
+            border: 1px solid #e7c93a !important;
+            border-radius: 12px !important;
+            font-weight: 700 !important;
         }
 
         .stButton > button:hover {
-            background: transparent !important;
-            color: #ffffff !important;
+            background: #f5cf2e !important;
+            color: #0d234d !important;
         }
 
         h1, h2, h3, h4, h5, h6,

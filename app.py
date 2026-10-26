@@ -92,7 +92,7 @@ st.markdown(
         div[data-testid="stAlert"],
         [data-testid="stVerticalBlock"] > div,
         [data-testid="stDataFrame"] > div {
-            background: #0d2d63 !important;
+            background: transparent !important;
             border: 1px solid rgba(143, 172, 214, 0.35) !important;
             border-radius: 14px !important;
             color: #edf6ff !important;
@@ -159,7 +159,7 @@ st.markdown(
         }
 
         .stDataFrame, .stTable {
-            background: rgba(255,255,255,0.93);
+            background: transparent !important;
             border-radius: 12px;
         }
 

@@ -105,10 +105,10 @@ st.markdown(
         .stCheckbox,
         div[data-baseweb="select"] > div,
         div[data-baseweb="input"] > div {
-            background: #ffffff !important;
+            background: transparent !important;
             border: 1px solid rgba(49, 51, 63, 0.18) !important;
             border-radius: 10px !important;
-            color: #0f172a !important;
+            color: #000000 !important;
         }
 
         .stTextInput input,
@@ -155,7 +155,7 @@ st.markdown(
         .stTextInput > label,
         .stTextArea > label,
         .stDateInput > label {
-            color: transparent !important;
+            color: #edf6ff !important;
         }
 
         .stDataFrame, .stTable {

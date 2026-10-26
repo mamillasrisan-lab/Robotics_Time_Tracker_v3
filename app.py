@@ -91,67 +91,60 @@ st.markdown(
         div[data-testid="stExpander"],
         div[data-testid="stAlert"],
         [data-testid="stVerticalBlock"] > div,
-        [data-testid="stDataFrame"] > div {
+        [data-testid="stDataFrame"] > div,
+        div[data-testid="stTextInput"],
+        div[data-testid="stTextArea"],
+        div[data-testid="stSelectbox"],
+        div[data-testid="stDateInput"],
+        div[data-testid="stCheckbox"],
+        div[data-baseweb="select"],
+        div[data-baseweb="input"],
+        div[role="button"],
+        div[role="combobox"],
+        div[role="textbox"],
+        textarea,
+        input,
+        select {
             background: transparent !important;
-            border: 1px solid rgba(255, 255, 255, 0.22) !important;
-            border-radius: 14px !important;
+            border: 1px solid rgba(255, 255, 255, 0.25) !important;
+            border-radius: 10px !important;
+            box-shadow: none !important;
             color: #edf6ff !important;
         }
 
+        div[data-testid="stTextInput"] > div > div > input,
         div[data-testid="stTextArea"] > div > div > textarea,
-        div[data-testid="stTextArea"] textarea,
-        div[data-testid="stTextInput"] input,
-        div[data-testid="stSelectbox"] input,
-        div[data-testid="stSelectbox"] > div,
+        div[data-testid="stSelectbox"] > div > div > div,
         div[data-testid="stDateInput"] input,
         div[data-testid="stCheckbox"] input,
         div[data-baseweb="select"] > div,
         div[data-baseweb="input"] > div,
-        div[role="textbox"],
-        div[role="button"],
-        div[role="combobox"],
         textarea,
         input,
         select {
-            background: rgba(255, 255, 255, 0.04) !important;
-            border: 1px solid rgba(255, 255, 255, 0.28) !important;
-            border-radius: 10px !important;
+            background: transparent !important;
             color: #edf6ff !important;
+            border: none !important;
             box-shadow: none !important;
         }
 
-        .stTextInput input,
-        .stTextArea textarea,
-        .stDateInput input,
-        .stNumberInput input,
-        .stDateInput [data-baseweb="input"] input,
-        .stSelectbox [role="combobox"],
-        .stSelectbox div[role="button"],
-        .stSelectbox [data-baseweb="select"] > div,
-        .stSelectbox [data-baseweb="select"] span,
-        .stDateInput [data-baseweb="select"] span,
         .stTextInput > div > div > input::placeholder,
         .stTextArea > div > div > textarea::placeholder {
-            color: #edf6ff !important;
-        }
-
-        .stTextInput > div > div > input::placeholder,
-        .stTextArea > div > div > textarea::placeholder {
-            color: rgba(237, 246, 255, 0.75) !important;
+            color: rgba(237, 246, 255, 0.76) !important;
             opacity: 1 !important;
         }
 
         .stButton > button {
-            background: #f7d64a !important;
-            color: #0f2d69 !important;
-            border: 1px solid #e7c93a !important;
+            background: transparent !important;
+            color: #edf6ff !important;
+            border: 1px solid rgba(255,255,255,0.35) !important;
             border-radius: 12px !important;
             font-weight: 700 !important;
         }
 
         .stButton > button:hover {
-            background: #f5cf2e !important;
-            color: #0d234d !important;
+            background: transparent !important;
+            color: #ffffff !important;
         }
 
         h1, h2, h3, h4, h5, h6,

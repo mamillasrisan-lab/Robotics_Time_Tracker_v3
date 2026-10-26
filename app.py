@@ -66,7 +66,7 @@ st.markdown(
     <style>
         .stApp {
             background: linear-gradient(180deg, #0e2d6b 0%, #183f90 35%, #f7d64a 100%);
-            color: #f9fbff;
+            color: #edf6ff;
         }
 
         .block-container {
@@ -92,8 +92,8 @@ st.markdown(
         div[data-testid="stAlert"],
         [data-testid="stVerticalBlock"] > div,
         [data-testid="stDataFrame"] > div {
-            background: rgba(11, 31, 68, 0.78) !important;
-            border: 1px solid rgba(143, 172, 214, 0.35) !important;
+            background: transparent !important;
+            border: 1px solid rgba(255, 255, 255, 0.22) !important;
             border-radius: 14px !important;
             color: #edf6ff !important;
         }
@@ -110,11 +110,15 @@ st.markdown(
         div[role="combobox"],
         input,
         textarea,
-        select {
-            background: rgba(255, 255, 255, 0.97) !important;
-            border: 1px solid rgba(49, 51, 63, 0.18) !important;
+        select,
+        div[role="listbox"],
+        ul[role="listbox"],
+        div[role="option"] {
+            background: transparent !important;
+            border: 1px solid rgba(255, 255, 255, 0.22) !important;
             border-radius: 10px !important;
-            color: #0f172a !important;
+            color: #edf6ff !important;
+            box-shadow: none !important;
         }
 
         .stTextInput input,
@@ -131,30 +135,30 @@ st.markdown(
         .stSelectbox [data-baseweb="popover"] div,
         .stDateInput [data-baseweb="select"] span,
         .stDateInput [data-baseweb="popover"] *,
-        div[role="listbox"],
-        div[role="option"],
-        ul[role="listbox"] {
-            background: rgba(255, 255, 255, 0.98) !important;
-            color: #0f172a !important;
+        .stSelectbox > div > div > div,
+        .stSelectbox > div > div > span,
+        .stSelectbox > div > div > input {
+            background: transparent !important;
+            color: #edf6ff !important;
         }
 
         .stTextInput > div > div > input::placeholder,
         .stTextArea > div > div > textarea::placeholder {
-            color: #495774 !important;
+            color: rgba(237, 246, 255, 0.75) !important;
             opacity: 1 !important;
         }
 
         .stButton > button {
-            background: #f7d64a;
-            color: #0f2d69;
-            border: 1px solid #e7c93a;
+            background: transparent !important;
+            color: #edf6ff !important;
+            border: 1px solid rgba(255, 255, 255, 0.3) !important;
             border-radius: 12px;
             font-weight: 700;
         }
 
         .stButton > button:hover {
-            background: #f5cf2e;
-            color: #0d234d;
+            background: transparent !important;
+            color: #ffffff !important;
         }
 
         h1, h2, h3, h4, h5, h6,
@@ -169,15 +173,16 @@ st.markdown(
         }
 
         .stDataFrame, .stTable {
-            background: rgba(255,255,255,0.93) !important;
+            background: transparent !important;
             border-radius: 12px;
         }
 
         .stMetric {
-            background: rgba(255,255,255,0.12);
-            border: 1px solid rgba(255,255,255,0.2);
+            background: transparent !important;
+            border: 1px solid rgba(255,255,255,0.18) !important;
             border-radius: 12px;
             padding: 0.8rem;
+            color: #edf6ff !important;
         }
     </style>
     """,

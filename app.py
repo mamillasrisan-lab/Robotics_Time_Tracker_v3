@@ -92,23 +92,29 @@ st.markdown(
         div[data-testid="stAlert"],
         [data-testid="stVerticalBlock"] > div,
         [data-testid="stDataFrame"] > div {
-            background: transparent !important;
+            background: rgba(11, 31, 68, 0.78) !important;
             border: 1px solid rgba(143, 172, 214, 0.35) !important;
             border-radius: 14px !important;
             color: #edf6ff !important;
         }
 
-        .stTextInput > div > div > input,
-        .stTextArea > div > div > textarea,
+        .stTextInput > div > div,
+        .stTextArea > div > div,
         .stSelectbox > div > div,
         .stDateInput > div > div,
-        .stCheckbox,
+        .stNumberInput > div > div,
+        .stCheckbox > div,
         div[data-baseweb="select"] > div,
-        div[data-baseweb="input"] > div {
-            background: transparent !important;
+        div[data-baseweb="input"] > div,
+        div[role="button"],
+        div[role="combobox"],
+        input,
+        textarea,
+        select {
+            background: rgba(255, 255, 255, 0.97) !important;
             border: 1px solid rgba(49, 51, 63, 0.18) !important;
             border-radius: 10px !important;
-            color: #000000 !important;
+            color: #0f172a !important;
         }
 
         .stTextInput input,
@@ -124,8 +130,12 @@ st.markdown(
         .stSelectbox [data-baseweb="popover"] span,
         .stSelectbox [data-baseweb="popover"] div,
         .stDateInput [data-baseweb="select"] span,
-        .stDateInput [data-baseweb="popover"] * {
-            color: #000000 !important;
+        .stDateInput [data-baseweb="popover"] *,
+        div[role="listbox"],
+        div[role="option"],
+        ul[role="listbox"] {
+            background: rgba(255, 255, 255, 0.98) !important;
+            color: #0f172a !important;
         }
 
         .stTextInput > div > div > input::placeholder,
@@ -159,7 +169,7 @@ st.markdown(
         }
 
         .stDataFrame, .stTable {
-            background: transparent !important;
+            background: rgba(255,255,255,0.93) !important;
             border-radius: 12px;
         }
 
@@ -351,6 +361,7 @@ def clock_in_callback():
                 "",
                 "",
                 "Active",
+                "",
                 "",
                 "",
                 "",

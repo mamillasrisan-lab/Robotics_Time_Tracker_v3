@@ -1,5 +1,3 @@
-
-
 import html
 import os
 from datetime import date, datetime, time, timedelta
@@ -108,31 +106,18 @@ st.markdown(
         input,
         select {
             background: transparent !important;
-            border: 1px solid rgba(255, 255, 255, 0.25) !important;
             border-radius: 10px !important;
             box-shadow: none !important;
             color: #edf6ff !important;
         }
 
-        /* Make all Streamlit form fields transparent */
-        div[data-testid="stTextInput"] > div,
-        div[data-testid="stTextInput"] > div > div,
         div[data-testid="stTextInput"] > div > div > input,
-        div[data-testid="stTextArea"] > div,
-        div[data-testid="stTextArea"] > div > div,
         div[data-testid="stTextArea"] > div > div > textarea,
-        div[data-testid="stSelectbox"] > div,
-        div[data-testid="stSelectbox"] > div > div,
         div[data-testid="stSelectbox"] > div > div > div,
-        div[data-baseweb="select"],
-        div[data-baseweb="select"] > div,
-        div[data-baseweb="select"] [role="combobox"],
-        div[data-baseweb="input"],
-        div[data-baseweb="input"] > div,
-        div[data-testid="stDateInput"],
-        div[data-testid="stDateInput"] > div,
         div[data-testid="stDateInput"] input,
         div[data-testid="stCheckbox"] input,
+        div[data-baseweb="select"] > div,
+        div[data-baseweb="input"] > div,
         textarea,
         input,
         select {
@@ -140,16 +125,6 @@ st.markdown(
             color: #edf6ff !important;
             border: none !important;
             box-shadow: none !important;
-        }
-
-        /* Keep the task form and dropdown fields from showing dark fills */
-        div[data-testid="stForm"] input,
-        div[data-testid="stForm"] textarea,
-        div[data-testid="stForm"] [data-baseweb="select"],
-        div[data-testid="stForm"] [data-baseweb="select"] > div,
-        div[data-testid="stForm"] [data-baseweb="input"],
-        div[data-testid="stForm"] [data-baseweb="input"] > div {
-            background: transparent !important;
         }
 
         .stTextInput > div > div > input::placeholder,
@@ -161,7 +136,6 @@ st.markdown(
         .stButton > button {
             background: transparent !important;
             color: #edf6ff !important;
-            border: 1px solid rgba(255,255,255,0.35) !important;
             border-radius: 12px !important;
             font-weight: 700 !important;
         }
@@ -189,7 +163,6 @@ st.markdown(
 
         .stMetric {
             background: transparent !important;
-            border: 1px solid rgba(255,255,255,0.18) !important;
             border-radius: 12px;
             padding: 0.8rem;
             color: #edf6ff !important;
@@ -586,7 +559,6 @@ def app():
                 color: #222;
                 padding: 0.4rem 0.65rem;
                 border-radius: 0.45rem;
-                border: 1px solid rgba(128,128,128,0.30);
                 box-shadow: 0 1px 4px rgba(0,0,0,0.08);
                 max-width: 45%;
                 overflow-wrap: anywhere;

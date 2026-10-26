@@ -19,8 +19,8 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/1eNZmloz7IozVoU_1cTsKVveUca7
 MEMBERS = [
     "Alex Johnson",
     "Jordan Smith",
-    "Taylor Lee"
-    "Test User 1"
+    "Taylor Lee",
+    "Test User 1",
     "Test User 2",
 ]
 

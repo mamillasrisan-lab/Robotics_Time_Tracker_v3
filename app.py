@@ -98,8 +98,9 @@ st.markdown(
         .stSelectbox > div > div,
         .stDateInput > div > div,
         .stCheckbox {
-            background: rgba(255,255,255,0.95);
+            background: #dfeeff !important;
             border-radius: 10px;
+            border: 1px solid #cfe0ff;
         }
 
         .stButton > button {

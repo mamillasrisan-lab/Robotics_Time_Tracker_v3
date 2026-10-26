@@ -105,15 +105,15 @@ st.markdown(
         .stCheckbox,
         div[data-baseweb="select"] > div,
         div[data-baseweb="input"] > div {
-            background: #dfeeff !important;
-            border: 1px solid #a8c2ee !important;
+            background: #ffffff !important;
+            border: 1px solid rgba(49, 51, 63, 0.18) !important;
             border-radius: 10px !important;
-            color: #0b1730 !important;
+            color: #0f172a !important;
         }
 
         .stTextInput > div > div > input::placeholder,
         .stTextArea > div > div > textarea::placeholder {
-            color: #203d75 !important;
+            color: #495774 !important;
             opacity: 1 !important;
         }
 

@@ -155,7 +155,7 @@ st.markdown(
         .stTextInput > label,
         .stTextArea > label,
         .stDateInput > label {
-            color: transparent !important;
+            color: #edf6ff !important;
         }
 
         .stDataFrame, .stTable {
@@ -168,7 +168,7 @@ st.markdown(
             border: 1px solid rgba(255,255,255,0.18) !important;
             border-radius: 12px;
             padding: 0.8rem;
-            color: transparent !important;
+            color: #edf6ff !important;
         }
     </style>
     """,

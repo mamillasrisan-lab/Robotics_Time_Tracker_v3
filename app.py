@@ -95,7 +95,7 @@ st.markdown(
             background: transparent !important;
             border: 1px solid rgba(255, 255, 255, 0.22) !important;
             border-radius: 14px !important;
-            color: #edf6ff !important;
+            color: transparent !important;
         }
 
         .stTextInput > div > div,
@@ -117,7 +117,7 @@ st.markdown(
             background: transparent !important;
             border: 1px solid rgba(255, 255, 255, 0.22) !important;
             border-radius: 10px !important;
-            color: #edf6ff !important;
+            color: transparent !important;
             box-shadow: none !important;
         }
 
@@ -150,7 +150,7 @@ st.markdown(
 
         .stButton > button {
             background: transparent !important;
-            color: #edf6ff !important;
+            color: transparent !important;
             border: 1px solid rgba(255, 255, 255, 0.3) !important;
             border-radius: 12px;
             font-weight: 700;

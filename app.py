@@ -106,7 +106,6 @@ st.markdown(
         input,
         select {
             background: transparent !important;
-            border: 1px solid rgba(255, 255, 255, 0.25) !important;
             border-radius: 10px !important;
             box-shadow: none !important;
             color: #edf6ff !important;
@@ -137,7 +136,6 @@ st.markdown(
         .stButton > button {
             background: transparent !important;
             color: #edf6ff !important;
-            border: 1px solid rgba(255,255,255,0.35) !important;
             border-radius: 12px !important;
             font-weight: 700 !important;
         }
@@ -165,7 +163,6 @@ st.markdown(
 
         .stMetric {
             background: transparent !important;
-            border: 1px solid rgba(255,255,255,0.18) !important;
             border-radius: 12px;
             padding: 0.8rem;
             color: #edf6ff !important;
@@ -562,7 +559,6 @@ def app():
                 color: #222;
                 padding: 0.4rem 0.65rem;
                 border-radius: 0.45rem;
-                border: 1px solid rgba(128,128,128,0.30);
                 box-shadow: 0 1px 4px rgba(0,0,0,0.08);
                 max-width: 45%;
                 overflow-wrap: anywhere;

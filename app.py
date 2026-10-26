@@ -538,8 +538,8 @@ def app():
     st.title("Robotics Team Time Tracker")
     st.write(
         "The home page shows everyone's time for today. Members can clock in or out below. "
-        "Each new visit is saved as a separate row. Track attendance, review time reports, "
-        "and manage shared team tasks. Time is recorded in California time."
+        "Attendance will be tracked, and you can review the total amount of time members spent. "
+        "and manage shared team tasks."
     )
 
     device_id = get_device_metadata()

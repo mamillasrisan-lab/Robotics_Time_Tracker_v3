@@ -12,7 +12,7 @@ from gspread.exceptions import WorksheetNotFound
 
 # ========================= SETTINGS =========================
 
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1PUB0qcTfH9qPxSdldpfeQdDR0GKCrz5QLDoDn4TgWJI/edit?gid=0#gid=0"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1PUB0qcTfH9qPxSdldpfeQdDR0GKCrz5QLDoDn4TgWJI/edit"
 
 TEAMS_WORKSHEET = "Teams"
 NOTES_WORKSHEET = "Notes"
@@ -28,7 +28,6 @@ TEAM_HEADERS = [
     "Strengths",
     "Weaknesses",
     "Updated At",
-    "Relationship",
 ]
 
 NOTE_HEADERS = [
@@ -53,9 +52,6 @@ COMPONENTS = [
 RATING_OPTIONS = ["Good", "OK", "Bad"]
 RATING_POINTS = {"Good": 100, "OK": 60, "Bad": 20}
 RATING_COLORS = {"Good": "#22c55e", "OK": "#f5c542", "Bad": "#ef4444"}
-
-RELATIONSHIP_OPTIONS = ["Alliance", "Opposition", "Neutral"]
-RELATIONSHIP_COLORS = {"Alliance": "#22c55e", "Opposition": "#ef4444", "Neutral": "#cbd9ee"}
 
 st.set_page_config(
     page_title="Robot Scouting Board",
@@ -240,37 +236,17 @@ def get_workbook():
     return client.open_by_url(SHEET_URL)
 
 
-def column_name(index):
-    letters = ""
-    while index:
-        index, remainder = divmod(index - 1, 26)
-        letters = chr(ord("A") + remainder) + letters
-    return letters
-
-
 def get_or_create_worksheet(workbook, title, headers):
     try:
         worksheet = workbook.worksheet(title)
     except WorksheetNotFound:
-        worksheet = workbook.add_worksheet(title=title, rows=200, cols=max(len(headers), 11))
+        worksheet = workbook.add_worksheet(title=title, rows=200, cols=max(len(headers), 10))
         worksheet.append_row(headers, value_input_option="RAW")
         return worksheet
 
     rows = worksheet.get_all_values()
     if not rows or not any(cell.strip() for cell in rows[0]):
         worksheet.append_row(headers, value_input_option="RAW")
-        return worksheet
-
-    existing_headers = [cell.strip() for cell in rows[0]]
-    for header in headers:
-        if header in existing_headers:
-            continue
-        worksheet.update(
-            range_name=f"{column_name(len(existing_headers) + 1)}1",
-            values=[[header]],
-            value_input_option="RAW",
-        )
-        existing_headers.append(header)
     return worksheet
 
 
@@ -280,59 +256,6 @@ def get_teams_worksheet(workbook):
 
 def get_notes_worksheet(workbook):
     return get_or_create_worksheet(workbook, NOTES_WORKSHEET, NOTE_HEADERS)
-
-
-def get_role_worksheet(workbook, role):
-    try:
-        worksheet = workbook.worksheet(role)
-    except WorksheetNotFound:
-        worksheet = workbook.add_worksheet(title=role, rows=1000, cols=max(len(TEAM_HEADERS), 11))
-        worksheet.append_row(TEAM_HEADERS, value_input_option="RAW")
-        return worksheet
-
-    rows = worksheet.get_all_values()
-    if not rows or not any(cell.strip() for cell in rows[0]):
-        worksheet.append_row(TEAM_HEADERS, value_input_option="RAW")
-        return worksheet
-
-    header = [cell.strip() for cell in (rows[0] + [""] * len(TEAM_HEADERS))[: len(TEAM_HEADERS)]]
-    if header != TEAM_HEADERS:
-        raise ValueError(
-            f"The '{role}' tab in your spreadsheet already holds something else, so the app will not overwrite it. "
-            "Rename or empty that tab, then reload."
-        )
-    return worksheet
-
-
-def refresh_role_views(workbook=None):
-    """Rebuild the Alliance / Opposition / Neutral tabs from the Teams tab."""
-    workbook = workbook or get_workbook()
-    team_rows = get_teams_worksheet(workbook).get_all_values()
-
-    buckets = {role: [] for role in RELATIONSHIP_OPTIONS}
-    for raw_row in team_rows[1:]:
-        values = (raw_row + [""] * len(TEAM_HEADERS))[: len(TEAM_HEADERS)]
-        if not values[0].strip():
-            continue
-        role = values[10].strip() if values[10].strip() in RELATIONSHIP_OPTIONS else "Neutral"
-        role_row = list(values)
-        role_row[10] = role
-        buckets[role].append(role_row)
-
-    for role in RELATIONSHIP_OPTIONS:
-        worksheet = get_role_worksheet(workbook, role)
-        worksheet.clear()
-        worksheet.update(
-            range_name="A1",
-            values=[list(TEAM_HEADERS)] + buckets[role],
-            value_input_option="RAW",
-        )
-
-
-def ensure_role_views(workbook):
-    existing_titles = {worksheet.title for worksheet in workbook.worksheets()}
-    if any(role not in existing_titles for role in RELATIONSHIP_OPTIONS):
-        refresh_role_views(workbook)
 
 
 @st.cache_data(ttl=20, show_spinner=False)
@@ -345,8 +268,6 @@ def load_sheet_rows():
 
 
 def build_data():
-    workbook = get_workbook()
-    ensure_role_views(workbook)
     team_rows, note_rows = load_sheet_rows()
 
     notes_by_team = {}
@@ -387,7 +308,6 @@ def build_data():
                 "strengths": values[7],
                 "weaknesses": values[8],
                 "updated_at": values[9].strip(),
-                "relationship": values[10].strip() if values[10].strip() in RELATIONSHIP_OPTIONS else "Neutral",
                 "notes": team_notes,
                 "row": sheet_row,
             }
@@ -412,12 +332,10 @@ def add_team_to_sheet(number, name, event):
             "",
             "",
             timestamp(),
-            "Neutral",
         ],
         value_input_option="RAW",
         insert_data_option="INSERT_ROWS",
     )
-    refresh_role_views(workbook)
     st.cache_data.clear()
     return team_id
 
@@ -440,20 +358,6 @@ def save_evaluation_to_sheet(team, ratings, strengths, weaknesses):
         ],
         value_input_option="RAW",
     )
-    refresh_role_views(workbook)
-    st.cache_data.clear()
-
-
-def save_relationship_to_sheet(team, relationship):
-    workbook = get_workbook()
-    worksheet = get_teams_worksheet(workbook)
-    row = team["row"]
-    worksheet.update(
-        range_name=f"J{row}:K{row}",
-        values=[[timestamp(), relationship if relationship in RELATIONSHIP_OPTIONS else "Neutral"]],
-        value_input_option="RAW",
-    )
-    refresh_role_views(workbook)
     st.cache_data.clear()
 
 
@@ -469,7 +373,6 @@ def add_note_to_sheet(team, text):
         values=[[timestamp()]],
         value_input_option="RAW",
     )
-    refresh_role_views(workbook)
     st.cache_data.clear()
 
 
@@ -485,7 +388,6 @@ def delete_team_from_sheet(team):
     for note in sorted(team["notes"], key=lambda item: item["row"], reverse=True):
         notes_worksheet.delete_rows(note["row"])
     get_teams_worksheet(workbook).delete_rows(team["row"])
-    refresh_role_views(workbook)
     st.cache_data.clear()
 
 
@@ -540,7 +442,7 @@ def sheet_error(exc, action):
 def render_header(team):
     st.title(f"🤖 {team_label(team)}")
     subtitle = team["event"] if team["event"] else "No event recorded"
-    st.caption(f"{subtitle} · Role: {team['relationship']} · Last updated {team['updated_at'] or 'never'}")
+    st.caption(f"{subtitle} · Last updated {team['updated_at'] or 'never'}")
 
 
 def render_overview(team):
@@ -577,39 +479,6 @@ def render_overview(team):
     st.caption(
         "The score is the average of the chassis, arm and claw ratings (Good = 100, OK = 60, Bad = 20)."
     )
-
-
-def render_relationship_form(team):
-    st.divider()
-    st.subheader("Alliance, opposition or neutral")
-    st.caption(
-        "Tag this team so you know who you are partnered with, who you are up against, and who is neither."
-    )
-
-    current = team["relationship"] if team["relationship"] in RELATIONSHIP_OPTIONS else "Neutral"
-
-    with st.form(f"relationship_{team['id']}"):
-        chosen = st.radio(
-            "This team is our…",
-            RELATIONSHIP_OPTIONS,
-            index=RELATIONSHIP_OPTIONS.index(current),
-            horizontal=True,
-            key=f"relationship_choice_{team['id']}",
-        )
-        st.markdown(
-            f'<span class="rating-pill" style="background:{RELATIONSHIP_COLORS[current]};">Currently tagged: {current}</span>',
-            unsafe_allow_html=True,
-        )
-        submitted = st.form_submit_button("Save role", use_container_width=True)
-
-    if submitted:
-        try:
-            save_relationship_to_sheet(team, chosen)
-        except Exception as exc:
-            sheet_error(exc, "save the team role")
-        else:
-            st.session_state["flash_message"] = f"{team_label(team)} is tagged as {chosen}."
-            st.rerun()
 
 
 def render_evaluation_form(team):
@@ -754,44 +623,6 @@ def render_notes(team):
                     st.rerun()
 
 
-def render_role_board(data):
-    if not data["teams"]:
-        return
-
-    st.divider()
-    st.subheader("Who is on our side")
-    st.caption(
-        "Everyone scouted so far, grouped by role. The same teams are kept sorted into the "
-        "`Alliance`, `Opposition` and `Neutral` tabs of the sheet."
-    )
-
-    columns = st.columns(3)
-    for column, role in zip(columns, RELATIONSHIP_OPTIONS):
-        members = [team for team in data["teams"] if team["relationship"] == role]
-        with column:
-            st.markdown(
-                f'<span class="rating-pill" style="background:{RELATIONSHIP_COLORS[role]};">{role} ({len(members)})</span>',
-                unsafe_allow_html=True,
-            )
-            st.write("")
-            if not members:
-                st.markdown(
-                    '<div class="bullet-empty">No teams tagged yet.</div>',
-                    unsafe_allow_html=True,
-                )
-                continue
-            for member in members:
-                score = scout_score(member["ratings"])
-                note_count = len(member["notes"])
-                st.markdown(
-                    '<div class="scout-note">'
-                    f"<b>{team_label(member)}</b>"
-                    f'<div class="scout-note-time">Score {score}/100 · {note_count} note(s)</div>'
-                    "</div>",
-                    unsafe_allow_html=True,
-                )
-
-
 def render_comparison(data):
     if len(data["teams"]) < 2:
         return
@@ -806,7 +637,6 @@ def render_comparison(data):
             {
                 "Team": f"#{team['number']} {team['name']}".strip(),
                 "Event": team["event"] or "—",
-                "Role": team["relationship"],
                 "Chassis": team["ratings"].get("chassis", "OK"),
                 "Arm": team["ratings"].get("arm", "OK"),
                 "Claw": team["ratings"].get("claw", "OK"),
@@ -880,10 +710,7 @@ def render_sidebar(data):
                     st.rerun()
 
     st.sidebar.divider()
-    st.sidebar.caption(
-        f"Saved to [this Google Sheet]({SHEET_URL}). Everything lives in `{TEAMS_WORKSHEET}` and `{NOTES_WORKSHEET}`; "
-        f"the `Alliance`, `Opposition` and `Neutral` tabs are rebuilt from it automatically."
-    )
+    st.sidebar.caption(f"Saved to [this Google Sheet]({SHEET_URL}) — tabs `{TEAMS_WORKSHEET}` and `{NOTES_WORKSHEET}`.")
 
 
 def app():
@@ -918,11 +745,9 @@ def app():
 
     render_header(team)
     render_overview(team)
-    render_relationship_form(team)
     render_evaluation_form(team)
     render_strengths_weaknesses(team)
     render_notes(team)
-    render_role_board(data)
     render_comparison(data)
 
 

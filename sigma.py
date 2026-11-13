@@ -12,7 +12,7 @@ from gspread.exceptions import WorksheetNotFound
 
 # ========================= SETTINGS =========================
 
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1PUB0qcTfH9qPxSdldpfeQdDR0GKCrz5QLDoDn4TgWJI/edit"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1PUB0qcTfH9qPxSdldpfeQdDR0GKCrz5QLDoDn4TgWJI/edit?gid=0#gid=0"
 
 TEAMS_WORKSHEET = "Teams"
 NOTES_WORKSHEET = "Notes"

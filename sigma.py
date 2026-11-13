@@ -45,7 +45,7 @@ TIMEZONE = "America/Los_Angeles"
 
 COMPONENTS = [
     ("chassis", "Chassis"),
-    ("arm", "Arm"),
+    ("lift", "Lift"),
     ("claw", "Claw"),
 ]
 

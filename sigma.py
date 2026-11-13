@@ -253,6 +253,10 @@ def get_or_create_worksheet(workbook, title, headers):
 
 def get_teams_worksheet(workbook):
     worksheet = get_or_create_worksheet(workbook, TEAMS_WORKSHEET, TEAM_HEADERS)
+    # Existing sheets may have been created with only 10 columns. Expand the grid
+    # before writing the new Rated By header in column K.
+    if worksheet.col_count < len(TEAM_HEADERS):
+        worksheet.add_cols(len(TEAM_HEADERS) - worksheet.col_count)
     headers = worksheet.row_values(1)
     if "Rated By" not in headers:
         worksheet.update_cell(1, len(headers) + 1, "Rated By")

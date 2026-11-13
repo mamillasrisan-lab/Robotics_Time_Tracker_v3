@@ -1,14 +1,45 @@
-import json
 import os
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+import gspread
 import pandas as pd
 import streamlit as st
+from google.oauth2.service_account import Credentials
+from gspread.exceptions import WorksheetNotFound
 
 # ========================= SETTINGS =========================
+
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1PUB0qcTfH9qPxSdldpfeQdDR0GKCrz5QLDoDn4TgWJI/edit"
+
+TEAMS_WORKSHEET = "Teams"
+NOTES_WORKSHEET = "Notes"
+
+TEAM_HEADERS = [
+    "Team ID",
+    "Team Number",
+    "Team Name",
+    "Event",
+    "Chassis",
+    "Arm",
+    "Claw",
+    "Strengths",
+    "Weaknesses",
+    "Updated At",
+]
+
+NOTE_HEADERS = [
+    "Note ID",
+    "Team ID",
+    "Team Number",
+    "Note",
+    "Created At",
+]
+
+LOCAL_SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", r"C:\Users\Srithan\service_account.json")
+SCOPES = ["https://spreadsheets.google.com/feeds"]
 
 TIMEZONE = "America/Los_Angeles"
 
@@ -21,8 +52,6 @@ COMPONENTS = [
 RATING_OPTIONS = ["Good", "OK", "Bad"]
 RATING_POINTS = {"Good": 100, "OK": 60, "Bad": 20}
 RATING_COLORS = {"Good": "#22c55e", "OK": "#f5c542", "Bad": "#ef4444"}
-
-DATA_FILE = Path(os.getenv("SCOUT_DATA_FILE", str(Path(__file__).with_name("scouting_data.json"))))
 
 st.set_page_config(
     page_title="Robot Scouting Board",
@@ -171,75 +200,198 @@ st.markdown(
 )
 
 
-# ========================= DATA ACCESS =========================
+# ========================= GOOGLE SHEETS ACCESS =========================
 
 
 def timestamp():
     return datetime.now(ZoneInfo(TIMEZONE)).strftime("%b %d, %Y %I:%M %p")
 
 
-def blank_team(number, name, event=""):
-    return {
-        "id": str(uuid4()),
-        "number": str(number).strip(),
-        "name": str(name).strip(),
-        "event": str(event).strip(),
-        "ratings": {key: "OK" for key, _ in COMPONENTS},
-        "strengths": "",
-        "weaknesses": "",
-        "notes": [],
-        "updated_at": timestamp(),
-    }
-
-
-def load_data():
-    if not DATA_FILE.exists():
-        return {"teams": []}
-
+def get_credentials():
     try:
-        raw = json.loads(DATA_FILE.read_text(encoding="utf-8") or "{}")
-    except (json.JSONDecodeError, OSError):
-        return {"teams": []}
+        service_account_info = st.secrets["google_service_account"]
+        return Credentials.from_service_account_info(service_account_info, scopes=SCOPES)
+    except Exception:
+        pass
 
-    teams = raw.get("teams") if isinstance(raw, dict) else None
-    if not isinstance(teams, list):
-        return {"teams": []}
+    env_path = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE")
+    if env_path and Path(env_path).exists():
+        return Credentials.from_service_account_file(env_path, scopes=SCOPES)
 
-    cleaned = []
-    for team in teams:
-        if not isinstance(team, dict):
+    service_account_path = Path(LOCAL_SERVICE_ACCOUNT_FILE)
+    if service_account_path.exists():
+        return Credentials.from_service_account_file(str(service_account_path), scopes=SCOPES)
+
+    raise FileNotFoundError(
+        "Google service account file not found. Set GOOGLE_SERVICE_ACCOUNT_FILE or add a `google_service_account` entry in Streamlit secrets."
+    )
+
+
+@st.cache_resource(show_spinner=False)
+def get_workbook():
+    if not SHEET_URL.startswith("https://docs.google.com/spreadsheets/d/"):
+        raise ValueError("The Google Sheet URL in scout_app.py is not valid.")
+
+    client = gspread.authorize(get_credentials())
+    return client.open_by_url(SHEET_URL)
+
+
+def get_or_create_worksheet(workbook, title, headers):
+    try:
+        worksheet = workbook.worksheet(title)
+    except WorksheetNotFound:
+        worksheet = workbook.add_worksheet(title=title, rows=200, cols=max(len(headers), 10))
+        worksheet.append_row(headers, value_input_option="RAW")
+        return worksheet
+
+    rows = worksheet.get_all_values()
+    if not rows or not any(cell.strip() for cell in rows[0]):
+        worksheet.append_row(headers, value_input_option="RAW")
+    return worksheet
+
+
+def get_teams_worksheet(workbook):
+    return get_or_create_worksheet(workbook, TEAMS_WORKSHEET, TEAM_HEADERS)
+
+
+def get_notes_worksheet(workbook):
+    return get_or_create_worksheet(workbook, NOTES_WORKSHEET, NOTE_HEADERS)
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def load_sheet_rows():
+    workbook = get_workbook()
+    return (
+        get_teams_worksheet(workbook).get_all_values(),
+        get_notes_worksheet(workbook).get_all_values(),
+    )
+
+
+def build_data():
+    team_rows, note_rows = load_sheet_rows()
+
+    notes_by_team = {}
+    for sheet_row, raw_row in enumerate(note_rows[1:], start=2):
+        values = (raw_row + [""] * len(NOTE_HEADERS))[: len(NOTE_HEADERS)]
+        note_id, team_id, _number, text, created_at = values
+        team_id = team_id.strip()
+        if not team_id or not text.strip():
             continue
-        stored_ratings = team.get("ratings") if isinstance(team.get("ratings"), dict) else {}
-        stored_notes = team.get("notes") if isinstance(team.get("notes"), list) else []
-        cleaned.append(
+        notes_by_team.setdefault(team_id, []).append(
             {
-                "id": str(team.get("id") or uuid4()),
-                "number": str(team.get("number", "")).strip(),
-                "name": str(team.get("name", "")).strip() or "Unnamed team",
-                "event": str(team.get("event", "")).strip(),
-                "ratings": {
-                    key: stored_ratings.get(key) if stored_ratings.get(key) in RATING_OPTIONS else "OK"
-                    for key, _ in COMPONENTS
-                },
-                "strengths": str(team.get("strengths", "")),
-                "weaknesses": str(team.get("weaknesses", "")),
-                "notes": [
-                    {
-                        "id": str(note.get("id") or uuid4()),
-                        "created_at": str(note.get("created_at", "")),
-                        "text": str(note.get("text", "")),
-                    }
-                    for note in stored_notes
-                    if isinstance(note, dict) and str(note.get("text", "")).strip()
-                ],
-                "updated_at": str(team.get("updated_at", "")),
+                "id": note_id.strip() or str(uuid4()),
+                "created_at": created_at.strip(),
+                "text": text.strip(),
+                "row": sheet_row,
             }
         )
-    return {"teams": cleaned}
+
+    teams = []
+    for sheet_row, raw_row in enumerate(team_rows[1:], start=2):
+        values = (raw_row + [""] * len(TEAM_HEADERS))[: len(TEAM_HEADERS)]
+        team_id = values[0].strip()
+        if not team_id:
+            continue
+
+        ratings = {
+            key: values[4 + index].strip() if values[4 + index].strip() in RATING_OPTIONS else "OK"
+            for index, (key, _label) in enumerate(COMPONENTS)
+        }
+        team_notes = sorted(notes_by_team.get(team_id, []), key=lambda note: note["row"], reverse=True)
+        teams.append(
+            {
+                "id": team_id,
+                "number": values[1].strip(),
+                "name": values[2].strip() or "Unnamed team",
+                "event": values[3].strip(),
+                "ratings": ratings,
+                "strengths": values[7],
+                "weaknesses": values[8],
+                "updated_at": values[9].strip(),
+                "notes": team_notes,
+                "row": sheet_row,
+            }
+        )
+
+    return {"teams": teams}
 
 
-def save_data(data):
-    DATA_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+def add_team_to_sheet(number, name, event):
+    workbook = get_workbook()
+    worksheet = get_teams_worksheet(workbook)
+    team_id = str(uuid4())
+    worksheet.append_row(
+        [
+            team_id,
+            number.strip(),
+            name.strip(),
+            event.strip(),
+            "OK",
+            "OK",
+            "OK",
+            "",
+            "",
+            timestamp(),
+        ],
+        value_input_option="RAW",
+        insert_data_option="INSERT_ROWS",
+    )
+    st.cache_data.clear()
+    return team_id
+
+
+def save_evaluation_to_sheet(team, ratings, strengths, weaknesses):
+    workbook = get_workbook()
+    worksheet = get_teams_worksheet(workbook)
+    row = team["row"]
+    worksheet.update(
+        range_name=f"E{row}:J{row}",
+        values=[
+            [
+                ratings.get("chassis", "OK"),
+                ratings.get("arm", "OK"),
+                ratings.get("claw", "OK"),
+                strengths,
+                weaknesses,
+                timestamp(),
+            ]
+        ],
+        value_input_option="RAW",
+    )
+    st.cache_data.clear()
+
+
+def add_note_to_sheet(team, text):
+    workbook = get_workbook()
+    get_notes_worksheet(workbook).append_row(
+        [str(uuid4()), team["id"], team["number"], text.strip(), timestamp()],
+        value_input_option="RAW",
+        insert_data_option="INSERT_ROWS",
+    )
+    get_teams_worksheet(workbook).update(
+        range_name=f"J{team['row']}",
+        values=[[timestamp()]],
+        value_input_option="RAW",
+    )
+    st.cache_data.clear()
+
+
+def delete_note_from_sheet(note):
+    workbook = get_workbook()
+    get_notes_worksheet(workbook).delete_rows(note["row"])
+    st.cache_data.clear()
+
+
+def delete_team_from_sheet(team):
+    workbook = get_workbook()
+    notes_worksheet = get_notes_worksheet(workbook)
+    for note in sorted(team["notes"], key=lambda item: item["row"], reverse=True):
+        notes_worksheet.delete_rows(note["row"])
+    get_teams_worksheet(workbook).delete_rows(team["row"])
+    st.cache_data.clear()
+
+
+# ========================= HELPERS =========================
 
 
 def find_team(data, team_id):
@@ -277,6 +429,11 @@ def auto_weaknesses(ratings):
 
 def split_lines(text):
     return [line.strip(" -•\t") for line in text.splitlines() if line.strip(" -•\t")]
+
+
+def sheet_error(exc, action):
+    st.error(f"Could not {action} in Google Sheets. Check the Sheet URL, the service account, and that the sheet is shared with it as Editor.")
+    st.caption(f"Technical detail: {exc}")
 
 
 # ========================= SECTIONS =========================
@@ -324,7 +481,7 @@ def render_overview(team):
     )
 
 
-def render_evaluation_form(data, team):
+def render_evaluation_form(team):
     st.divider()
     st.subheader("Rate the robot")
     st.caption("Update Chassis, Arm and Claw, then save. The score and verdict above refresh immediately.")
@@ -363,13 +520,13 @@ def render_evaluation_form(data, team):
         submitted = st.form_submit_button("Save evaluation", use_container_width=True)
 
     if submitted:
-        team["ratings"] = chosen
-        team["strengths"] = strengths
-        team["weaknesses"] = weaknesses
-        team["updated_at"] = timestamp()
-        save_data(data)
-        st.session_state["flash_message"] = f"Evaluation saved for {team_label(team)}."
-        st.rerun()
+        try:
+            save_evaluation_to_sheet(team, chosen, strengths, weaknesses)
+        except Exception as exc:
+            sheet_error(exc, "save the evaluation")
+        else:
+            st.session_state["flash_message"] = f"Evaluation saved for {team_label(team)}."
+            st.rerun()
 
 
 def render_strengths_weaknesses(team):
@@ -415,7 +572,7 @@ def render_strengths_weaknesses(team):
             )
 
 
-def render_notes(data, team):
+def render_notes(team):
     st.divider()
     st.subheader("Scouting notes")
     st.caption("Match observations, strategy ideas and pit reports. Newest notes appear first.")
@@ -433,13 +590,12 @@ def render_notes(data, team):
         if not note_text.strip():
             st.warning("Write something before adding the note.")
         else:
-            team["notes"].insert(
-                0,
-                {"id": str(uuid4()), "created_at": timestamp(), "text": note_text.strip()},
-            )
-            team["updated_at"] = timestamp()
-            save_data(data)
-            st.rerun()
+            try:
+                add_note_to_sheet(team, note_text)
+            except Exception as exc:
+                sheet_error(exc, "add the note")
+            else:
+                st.rerun()
 
     if not team["notes"]:
         st.info("No notes for this team yet.")
@@ -459,10 +615,12 @@ def render_notes(data, team):
             )
         with action_col:
             if st.button("Delete", key=f"delete_note_{note['id']}", use_container_width=True):
-                team["notes"] = [item for item in team["notes"] if item["id"] != note["id"]]
-                team["updated_at"] = timestamp()
-                save_data(data)
-                st.rerun()
+                try:
+                    delete_note_from_sheet(note)
+                except Exception as exc:
+                    sheet_error(exc, "delete the note")
+                else:
+                    st.rerun()
 
 
 def render_comparison(data):
@@ -530,30 +688,32 @@ def render_sidebar(data):
             elif any(team["number"].casefold() == number.strip().casefold() for team in teams):
                 st.warning(f"Team #{number.strip()} is already on the board.")
             else:
-                new_team = blank_team(number, name, event)
-                data["teams"].append(new_team)
-                save_data(data)
-                st.session_state["selected_team_id"] = new_team["id"]
-                st.rerun()
+                try:
+                    new_id = add_team_to_sheet(number, name, event)
+                except Exception as exc:
+                    sheet_error(exc, "add the team")
+                else:
+                    st.session_state["selected_team_id"] = new_id
+                    st.rerun()
 
     current = find_team(data, selected_id)
     if current is not None:
         with st.sidebar.expander("🗑 Delete this team"):
             confirm = st.checkbox(f"I want to delete {team_label(current)}")
             if st.button("Delete team", disabled=not confirm, use_container_width=True):
-                data["teams"] = [team for team in data["teams"] if team["id"] != current["id"]]
-                save_data(data)
-                st.session_state.pop("selected_team_id", None)
-                st.rerun()
+                try:
+                    delete_team_from_sheet(current)
+                except Exception as exc:
+                    sheet_error(exc, "delete the team")
+                else:
+                    st.session_state.pop("selected_team_id", None)
+                    st.rerun()
 
     st.sidebar.divider()
-    st.sidebar.caption(f"Saved locally to `{DATA_FILE.name}`.")
+    st.sidebar.caption(f"Saved to [this Google Sheet]({SHEET_URL}) — tabs `{TEAMS_WORKSHEET}` and `{NOTES_WORKSHEET}`.")
 
 
 def app():
-    data = load_data()
-    render_sidebar(data)
-
     st.title("Robot Scouting Board")
     st.write(
         "Scout every team at an event in one place: rate the chassis, arm and claw as Good, OK or Bad, "
@@ -561,8 +721,21 @@ def app():
         "Notes capture the match-by-match detail."
     )
 
+    try:
+        data = build_data()
+    except Exception as exc:
+        st.error(
+            "Could not connect to the scouting Google Sheet. Check the Sheet URL in `scout_app.py`, the service-account "
+            "credentials (`google_service_account` in Streamlit secrets or `GOOGLE_SERVICE_ACCOUNT_FILE`), and make sure "
+            "the spreadsheet is shared with the service-account email as Editor."
+        )
+        st.caption(f"Technical detail: {exc}")
+        st.stop()
+
     if st.session_state.get("flash_message"):
         st.success(st.session_state.pop("flash_message"))
+
+    render_sidebar(data)
 
     team = find_team(data, st.session_state.get("selected_team_id"))
     if team is None:
@@ -572,9 +745,9 @@ def app():
 
     render_header(team)
     render_overview(team)
-    render_evaluation_form(data, team)
+    render_evaluation_form(team)
     render_strengths_weaknesses(team)
-    render_notes(data, team)
+    render_notes(team)
     render_comparison(data)
 
 

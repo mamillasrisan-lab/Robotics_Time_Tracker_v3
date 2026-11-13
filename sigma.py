@@ -28,6 +28,7 @@ TEAM_HEADERS = [
     "Strengths",
     "Weaknesses",
     "Updated At",
+    "Rated By",
 ]
 
 NOTE_HEADERS = [
@@ -251,7 +252,11 @@ def get_or_create_worksheet(workbook, title, headers):
 
 
 def get_teams_worksheet(workbook):
-    return get_or_create_worksheet(workbook, TEAMS_WORKSHEET, TEAM_HEADERS)
+    worksheet = get_or_create_worksheet(workbook, TEAMS_WORKSHEET, TEAM_HEADERS)
+    headers = worksheet.row_values(1)
+    if "Rated By" not in headers:
+        worksheet.update_cell(1, len(headers) + 1, "Rated By")
+    return worksheet
 
 
 def get_notes_worksheet(workbook):
@@ -308,6 +313,7 @@ def build_data():
                 "strengths": values[7],
                 "weaknesses": values[8],
                 "updated_at": values[9].strip(),
+                "rated_by": values[10].strip(),
                 "notes": team_notes,
                 "row": sheet_row,
             }
@@ -332,6 +338,7 @@ def add_team_to_sheet(number, name, event):
             "",
             "",
             timestamp(),
+            "",
         ],
         value_input_option="RAW",
         insert_data_option="INSERT_ROWS",
@@ -340,12 +347,12 @@ def add_team_to_sheet(number, name, event):
     return team_id
 
 
-def save_evaluation_to_sheet(team, ratings, strengths, weaknesses):
+def save_evaluation_to_sheet(team, ratings, strengths, weaknesses, rated_by):
     workbook = get_workbook()
     worksheet = get_teams_worksheet(workbook)
     row = team["row"]
     worksheet.update(
-        range_name=f"E{row}:J{row}",
+        range_name=f"E{row}:K{row}",
         values=[
             [
                 ratings.get("chassis", "OK"),
@@ -354,6 +361,7 @@ def save_evaluation_to_sheet(team, ratings, strengths, weaknesses):
                 strengths,
                 weaknesses,
                 timestamp(),
+                rated_by.strip(),
             ]
         ],
         value_input_option="RAW",
@@ -479,6 +487,8 @@ def render_overview(team):
     st.caption(
         "The score is the average of the chassis, lift and claw ratings (Good = 100, OK = 60, Bad = 20)."
     )
+    if team["rated_by"]:
+        st.caption(f"Rating entered by {team['rated_by']}.")
 
 
 def render_evaluation_form(team):
@@ -487,6 +497,12 @@ def render_evaluation_form(team):
     st.caption("Update Chassis, Lift and Claw, then save. The score and verdict above refresh immediately.")
 
     with st.form(f"evaluate_{team['id']}"):
+        rated_by = st.text_input(
+            "Your name (scout)",
+            value=team["rated_by"],
+            placeholder="Enter the name of the person rating this robot",
+            key=f"rated_by_{team['id']}",
+        )
         columns = st.columns(3)
         chosen = {}
         for column, (key, label) in zip(columns, COMPONENTS):
@@ -521,7 +537,7 @@ def render_evaluation_form(team):
 
     if submitted:
         try:
-            save_evaluation_to_sheet(team, chosen, strengths, weaknesses)
+            save_evaluation_to_sheet(team, chosen, strengths, weaknesses, rated_by)
         except Exception as exc:
             sheet_error(exc, "save the evaluation")
         else:

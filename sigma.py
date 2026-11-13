@@ -23,7 +23,10 @@ TEAM_HEADERS = [
     "Team Name",
     "Event",
     "Chassis",
-    "Lift
+    "Arm",
+    "Claw",
+    "Strengths",
+    "Weaknesses",
     "Updated At",
 ]
 

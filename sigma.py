@@ -349,7 +349,7 @@ def save_evaluation_to_sheet(team, ratings, strengths, weaknesses):
         values=[
             [
                 ratings.get("chassis", "OK"),
-                ratings.get("arm", "OK"),
+                ratings.get("lift", "OK"),
                 ratings.get("claw", "OK"),
                 strengths,
                 weaknesses,
@@ -477,14 +477,14 @@ def render_overview(team):
         st.markdown(pills, unsafe_allow_html=True)
 
     st.caption(
-        "The score is the average of the chassis, arm and claw ratings (Good = 100, OK = 60, Bad = 20)."
+        "The score is the average of the chassis, lift and claw ratings (Good = 100, OK = 60, Bad = 20)."
     )
 
 
 def render_evaluation_form(team):
     st.divider()
     st.subheader("Rate the robot")
-    st.caption("Update Chassis, Arm and Claw, then save. The score and verdict above refresh immediately.")
+    st.caption("Update Chassis, Lift and Claw, then save. The score and verdict above refresh immediately.")
 
     with st.form(f"evaluate_{team['id']}"):
         columns = st.columns(3)
@@ -638,7 +638,7 @@ def render_comparison(data):
                 "Team": f"#{team['number']} {team['name']}".strip(),
                 "Event": team["event"] or "—",
                 "Chassis": team["ratings"].get("chassis", "OK"),
-                "Arm": team["ratings"].get("arm", "OK"),
+                "Lift": team["ratings"].get("lift", "OK"),
                 "Claw": team["ratings"].get("claw", "OK"),
                 "Score": score,
                 "Verdict": verdict_label(score).split(" — ")[0],
@@ -716,7 +716,7 @@ def render_sidebar(data):
 def app():
     st.title("Robot Scouting Board")
     st.write(
-        "Scout every team at an event in one place: rate the chassis, arm and claw as Good, OK or Bad, "
+        "Scout every team at an event in one place: rate the chassis, lift and claw as Good, OK or Bad, "
         "and get an instant read on how strong the team is, what they do well and where they break down. "
         "Notes capture the match-by-match detail."
     )

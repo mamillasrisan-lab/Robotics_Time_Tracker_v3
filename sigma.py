@@ -685,6 +685,28 @@ def render_sidebar(data):
         selected_id = team_ids[0] if team_ids else None
 
     if teams:
+        search_number = st.sidebar.text_input(
+            "Search team number",
+            placeholder="Type a team number",
+            key="team_number_search",
+        ).strip().casefold()
+        if search_number:
+            matching_teams = [
+                team for team in teams
+                if search_number in team["number"].casefold()
+            ]
+            if matching_teams:
+                matching_ids = [team["id"] for team in matching_teams]
+                selected_id = st.sidebar.selectbox(
+                    "Search results",
+                    matching_ids,
+                    index=matching_ids.index(selected_id) if selected_id in matching_ids else 0,
+                    format_func=lambda team_id: team_label(find_team(data, team_id)),
+                    key="team_number_search_result",
+                )
+            else:
+                st.sidebar.info("No teams found with that number.")
+
         selected_id = st.sidebar.selectbox(
             "Active team",
             team_ids,
